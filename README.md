@@ -20,7 +20,7 @@ python main.py --transpile-python main.rsx
 include "rsxio" : *;
 
 int main() {
-    std::rout("Hello, World!");
+    std::rout("Hello, World!\n");
     return 0;
 }
 ```
