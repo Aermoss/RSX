@@ -11,4 +11,8 @@ def rout(environment):
 def rin(environment):
     return input()
 
+@create_function("STRING", {})
+def endl(environment):
+    return "\n"
+
 rsxio = pack_library()

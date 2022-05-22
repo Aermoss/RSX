@@ -22,16 +22,16 @@ def ftos(environment):
 def itos(environment):
     return str(environment["args"]["a"])
 
-@create_function("STRING", {"a": "STRING"})
+@create_function("BOOL", {"a": "STRING"})
 def stob(environment):
     if environment["args"]["a"] == "true": return True
     else: return False
 
-@create_function("STRING", {"a": "STRING"})
+@create_function("FLOAT", {"a": "STRING"})
 def stof(environment):
-    return float(environment["args"]["a"])
+    return float(environment["args"]["a"].lower().replace("f", ""))
 
-@create_function("STRING", {"a": "STRING"})
+@create_function("INT", {"a": "STRING"})
 def stoi(environment):
     return int(environment["args"]["a"])
 

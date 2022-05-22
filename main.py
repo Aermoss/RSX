@@ -506,11 +506,11 @@ def parser(tokens, file, create_json):
 
     def get(index):
         try: return tokens[index]
-        except: error()
+        except:
+            print(tokens, index)
+            error()
 
     while len(tokens) > pos:
-        # print(get(pos - 2), get(pos - 1), get(pos), get(pos + 1), get(pos + 2))
-
         if last_token["token"] == None or get(pos) != last_token["token"]:
             last_token = {"token": get(pos), "value": 0}
 
@@ -560,15 +560,15 @@ def parser(tokens, file, create_json):
                 if get(pos + 3) == "LPAREN":
                     args, arg_value = [], None
                     arg_pos = pos + 4
-                    arg_pass = 0
+                    arg_ignore = 0
 
                     while True:
                         if get(arg_pos) == "LPAREN":
-                            arg_pass += 1
+                            arg_ignore += 1
                             arg_pos += 1
 
                         elif get(arg_pos) == "RPAREN":
-                            if arg_pass == 0:
+                            if arg_ignore == 0:
                                 if arg_value != None:
                                     args.append(arg_value)
                                     arg_value = None
@@ -576,12 +576,44 @@ def parser(tokens, file, create_json):
                                 break
 
                             else:
-                                arg_pass -= 1
+                                arg_ignore -= 1
                                 arg_pos += 1
 
                         elif get(arg_pos) in ["VOID", "BOOL", "INT", "FLOAT", "STRING", "NAME", "NULL"]:
                             arg_value = {"type": get(arg_pos), "value": get(arg_pos + 1)}
                             arg_pos += 2
+
+                        elif get(arg_pos) == "CALL":
+                            name = get(arg_pos + 1)
+                            new_arg_pos = arg_pos + 2
+                            new_arg_ignore = 0
+                            new_tokens = []
+
+                            new_tokens.append("CALL")
+                            new_tokens.append(name)
+
+                            while True:
+                                if get(new_arg_pos) == "LPAREN":
+                                    new_tokens.append("LPAREN")
+                                    new_arg_ignore += 1
+                                    new_arg_pos += 1
+
+                                elif get(new_arg_pos) == "RPAREN":
+                                    new_tokens.append("RPAREN")
+                                    new_arg_ignore -= 1
+                                    new_arg_pos += 1
+
+                                    if new_arg_ignore == 0:
+                                        break
+                            
+                                else:
+                                    new_tokens.append(get(new_arg_pos))
+                                    new_arg_pos += 1
+
+                            new_tokens.append("SEMICOLON")
+
+                            arg_value = parser(new_tokens, file, create_json)[0]
+                            arg_pos = new_arg_pos
 
                         elif get(arg_pos) == "COMMA":
                             if arg_value != None:
@@ -628,15 +660,15 @@ def parser(tokens, file, create_json):
                     if get(pos + 5) == "LPAREN":
                         args, arg_value = [], None
                         arg_pos = pos + 6
-                        arg_pass = 0
+                        arg_ignore = 0
 
                         while True:
                             if get(arg_pos) == "LPAREN":
-                                arg_pass += 1
+                                arg_ignore += 1
                                 arg_pos += 1
 
                             elif get(arg_pos) == "RPAREN":
-                                if arg_pass == 0:
+                                if arg_ignore == 0:
                                     if arg_value != None:
                                         args.append(arg_value)
                                         arg_value = None
@@ -644,12 +676,44 @@ def parser(tokens, file, create_json):
                                     break
 
                                 else:
-                                    arg_pass -= 1
+                                    arg_ignore -= 1
                                     arg_pos += 1
 
                             elif get(arg_pos) in ["VOID", "BOOL", "INT", "FLOAT", "STRING", "NAME", "NULL"]:
                                 arg_value = {"type": get(arg_pos), "value": get(arg_pos + 1)}
                                 arg_pos += 2
+
+                            elif get(arg_pos) == "CALL":
+                                name = get(arg_pos + 1)
+                                new_arg_pos = arg_pos + 2
+                                new_arg_ignore = 0
+                                new_tokens = []
+
+                                new_tokens.append("CALL")
+                                new_tokens.append(name)
+
+                                while True:
+                                    if get(new_arg_pos) == "LPAREN":
+                                        new_tokens.append("LPAREN")
+                                        new_arg_ignore += 1
+                                        new_arg_pos += 1
+
+                                    elif get(new_arg_pos) == "RPAREN":
+                                        new_tokens.append("RPAREN")
+                                        new_arg_ignore -= 1
+                                        new_arg_pos += 1
+
+                                        if new_arg_ignore == 0:
+                                            break
+                                
+                                    else:
+                                        new_tokens.append(get(new_arg_pos))
+                                        new_arg_pos += 1
+
+                                new_tokens.append("SEMICOLON")
+
+                                arg_value = parser(new_tokens, file, create_json)[0]
+                                arg_pos = new_arg_pos
 
                             elif get(arg_pos) == "COMMA":
                                 if arg_value != None:
@@ -670,15 +734,15 @@ def parser(tokens, file, create_json):
             if get(pos + 2) == "LPAREN":
                 args, arg_value = [], None
                 arg_pos = pos + 3
-                arg_pass = 0
+                arg_ignore = 0
 
                 while True:
                     if get(arg_pos) == "LPAREN":
-                        arg_pass += 1
+                        arg_ignore += 1
                         arg_pos += 1
 
                     elif get(arg_pos) == "RPAREN":
-                        if arg_pass == 0:
+                        if arg_ignore == 0:
                             if arg_value != None:
                                 args.append(arg_value)
                                 arg_value = None
@@ -686,12 +750,44 @@ def parser(tokens, file, create_json):
                             break
 
                         else:
-                            arg_pass -= 1
+                            arg_ignore -= 1
                             arg_pos += 1
 
                     elif get(arg_pos) in ["VOID", "BOOL", "INT", "FLOAT", "STRING", "NAME", "NULL"]:
                         arg_value = {"type": get(arg_pos), "value": get(arg_pos + 1)}
                         arg_pos += 2
+
+                    elif get(arg_pos) == "CALL":
+                        name = get(arg_pos + 1)
+                        new_arg_pos = arg_pos + 2
+                        new_arg_ignore = 0
+                        new_tokens = []
+
+                        new_tokens.append("CALL")
+                        new_tokens.append(name)
+
+                        while True:
+                            if get(new_arg_pos) == "LPAREN":
+                                new_tokens.append("LPAREN")
+                                new_arg_ignore += 1
+                                new_arg_pos += 1
+
+                            elif get(new_arg_pos) == "RPAREN":
+                                new_tokens.append("RPAREN")
+                                new_arg_ignore -= 1
+                                new_arg_pos += 1
+
+                                if new_arg_ignore == 0:
+                                    break
+                        
+                            else:
+                                new_tokens.append(get(new_arg_pos))
+                                new_arg_pos += 1
+
+                        new_tokens.append("SEMICOLON")
+
+                        arg_value = parser(new_tokens, file, create_json)[0]
+                        arg_pos = new_arg_pos
 
                     elif get(arg_pos) == "COMMA":
                         if arg_value != None:
@@ -711,15 +807,15 @@ def parser(tokens, file, create_json):
                         if get(pos + 6) == "LPAREN":
                             args, arg_value = [], None
                             arg_pos = pos + 7
-                            arg_pass = 0
+                            arg_ignore = 0
 
                             while True:
                                 if get(arg_pos) == "LPAREN":
-                                    arg_pass += 1
+                                    arg_ignore += 1
                                     arg_pos += 1
 
                                 elif get(arg_pos) == "RPAREN":
-                                    if arg_pass == 0:
+                                    if arg_ignore == 0:
                                         if arg_value != None:
                                             args.append(arg_value)
                                             arg_value = None
@@ -727,12 +823,44 @@ def parser(tokens, file, create_json):
                                         break
 
                                     else:
-                                        arg_pass -= 1
+                                        arg_ignore -= 1
                                         arg_pos += 1
 
                                 elif get(arg_pos) in ["VOID", "BOOL", "INT", "FLOAT", "STRING", "NAME", "NULL"]:
                                     arg_value = {"type": get(arg_pos), "value": get(arg_pos + 1)}
                                     arg_pos += 2
+
+                                elif get(arg_pos) == "CALL":
+                                    name = get(arg_pos + 1)
+                                    new_arg_pos = arg_pos + 2
+                                    new_arg_ignore = 0
+                                    new_tokens = []
+
+                                    new_tokens.append("CALL")
+                                    new_tokens.append(name)
+
+                                    while True:
+                                        if get(new_arg_pos) == "LPAREN":
+                                            new_tokens.append("LPAREN")
+                                            new_arg_ignore += 1
+                                            new_arg_pos += 1
+
+                                        elif get(new_arg_pos) == "RPAREN":
+                                            new_tokens.append("RPAREN")
+                                            new_arg_ignore -= 1
+                                            new_arg_pos += 1
+
+                                            if new_arg_ignore == 0:
+                                                break
+                                    
+                                        else:
+                                            new_tokens.append(get(new_arg_pos))
+                                            new_arg_pos += 1
+
+                                    new_tokens.append("SEMICOLON")
+
+                                    arg_value = parser(new_tokens, file, create_json)[0]
+                                    arg_pos = new_arg_pos
 
                                 elif get(arg_pos) == "COMMA":
                                     if arg_value != None:
@@ -776,15 +904,15 @@ def parser(tokens, file, create_json):
             elif get(pos + 3) == "LPAREN":
                 args, arg_type, arg_name = {}, None, None
                 arg_pos = pos + 4
-                arg_pass = 0
+                arg_ignore = 0
 
                 while True:
                     if get(arg_pos) == "LPAREN":
-                        arg_pass += 1
+                        arg_ignore += 1
                         arg_pos += 1
 
                     elif get(arg_pos) == "RPAREN":
-                        if arg_pass == 0:
+                        if arg_ignore == 0:
                             if arg_name != None and arg_type != None:
                                 args[arg_name] = arg_type
                                 arg_type, arg_name = None, None
@@ -792,7 +920,7 @@ def parser(tokens, file, create_json):
                             break
 
                         else:
-                            arg_pass -= 1
+                            arg_ignore -= 1
                             arg_pos += 1
 
                     elif get(arg_pos) in ["VOID", "BOOL", "INT", "FLOAT", "STRING"]:
@@ -889,9 +1017,15 @@ def interpreter(ast, file, isbase = False, islib = False, functions = {}, variab
 
     for i in ast:
         if i["type"] == "func":
+            if i["name"] in functions or i["name"] in library_functions:
+                error("can't overload a function")
+
+            if i["name"] in variables:
+                error("can't overload a function with a variable")
+
             functions[i["name"]] = {"type": i["return_type"], "args": i["args"], "ast": i["ast"]}
 
-            if i["name"] == "main" and i["return_type"] == "INT" and i["args"] == {}:
+            if i["name"] == "main" and i["return_type"] == "INT" and i["args"] == {} and not found_main:
                 if isbase:
                     found_main = True
                     error_code = interpreter(functions[i["name"]]["ast"], file, False, False, functions, variables, i["return_type"], library_functions, include_folders, create_json)
@@ -936,7 +1070,14 @@ def interpreter(ast, file, isbase = False, islib = False, functions = {}, variab
                     error("'" + i["value"] + "'" + " " + "should be an integer or float value")
                 
         elif i["type"] == "var":
+            if i["name"] in functions or i["name"] in library_functions:
+                error("can't define a variable with an existing functions name")
+
             if i["value"] == None:
+                if i["name"] in variables:
+                    if variables[i["name"]]["type"] != i["value_type"]:
+                        error("variable already exists")
+
                 if i["value_type"] == "AUTO":
                     error("can't define auto type variables with no value")
 
@@ -951,12 +1092,12 @@ def interpreter(ast, file, isbase = False, islib = False, functions = {}, variab
                 if value == None:
                     error("unknown type")
 
+
                 variables[i["name"]] = {"type": i["value_type"], "value": {value: i["value_type"]}}
 
             elif "type" in i["value"]:
                 if isbase or islib:
-                    print(isbase, islib)
-                    error("functions only dfstgcan be called in functions")
+                    error("functions only can be called in functions")
 
                 if i["value"]["type"] == "call":
                     if i["name"] not in variables:
@@ -973,6 +1114,10 @@ def interpreter(ast, file, isbase = False, islib = False, functions = {}, variab
                         error("'" + i["value"]["name"] + "'" + " " + "was not declared in this scope")
 
                     if list(returned.keys())[0] == i["value_type"] or i["value_type"] == "AUTO" or i["value_type"] == None:
+                        if i["name"] in variables:
+                            if variables[i["name"]]["type"] != list(returned.keys())[0]:
+                                error("variable already exists")
+
                         variables[i["name"]] = {"type": list(returned.keys())[0], "value": {returned[list(returned.keys())[0]]: list(returned.keys())[0]}}
 
                     else:
@@ -999,16 +1144,13 @@ def interpreter(ast, file, isbase = False, islib = False, functions = {}, variab
 
                     else:
                         value_type = i["value_type"]
-                        
-                    if list(i["value"].keys())[0] in variables:
-                        if list(variables[list(i["value"].keys())[0]]["value"].values())[0] == "NULL" and value_type == "STRING":
-                            variables[i["name"]] = {"type": value_type, "value": {"null": value_type}}
 
-                        variables[i["name"]] = {"type": value_type, "value": {list(variables[list(i["value"].keys())[0]]["value"].keys())[0]: value_type}}
+                    if i["name"] in variables:
+                        if list(i["value"].values())[0] != variables[i["name"]]["type"]:
+                            error("can't change type of a variable")
 
-                    else:
-                        if list(i["value"].values())[0] == "NULL" and value_type == "STRING": variables[i["name"]] = {"type": value_type, "value": {"null": value_type}}
-                        else: variables[i["name"]] = {"type": value_type, "value": {list(i["value"].keys())[0]: value_type}}
+                    if list(i["value"].values())[0] == "NULL" and value_type == "STRING": variables[i["name"]] = {"type": value_type, "value": {"null": value_type}}
+                    else: variables[i["name"]] = {"type": value_type, "value": {list(i["value"].keys())[0]: value_type}}
 
                 else:
                     error("'" + i["name"] + "'" + " " + "was not declared in this scope")
@@ -1148,11 +1290,22 @@ def interpreter(ast, file, isbase = False, islib = False, functions = {}, variab
 
                             temp.append({"type": variables[j["value"]]["type"], "value": list(variables[j["value"]]["value"].keys())[0]})
 
+                        elif j["type"] == "call":
+                            temp_return_type = None
+
+                            if i["name"] in library_functions: temp_return_type = library_functions[i["name"]]["type"]
+                            elif i["name"] in functions: temp_return_type = functions[i["name"]]["type"]
+                            else: error("'" + i["name"] + "'" + " " + "was not declared in this scope")
+
+                            temp_value = interpreter([j], file, False, False, functions, variables, temp_return_type, library_functions, include_folders, create_json)
+                            temp.append({"type": list(temp_value.keys())[0], "value": list(temp_value.values())[0]})
+
                         else:
                             temp.append(j)
 
                     for index, j in enumerate(library_functions[i["name"]]["args"].values()):
-                        if temp[index]["type"] != j and temp[index]["type"] != "NULL":
+                        if temp[index]["type"] != j and temp[index]["type"] not in ["NULL"]:
+                            print(temp[index], j)
                             error("argument types didn't match for" + " " + "'" + i["name"] + "'")
 
                     new_temp = {}
@@ -1212,6 +1365,16 @@ def interpreter(ast, file, isbase = False, islib = False, functions = {}, variab
                     for j in i["args"]:
                         if j["type"] == "NAME":
                             temp.append({"type": variables[j["value"]]["type"], "value": list(variables[j["value"]]["value"].keys())[0]})
+
+                        elif j["type"] == "call":
+                            temp_return_type = None
+
+                            if i["name"] in library_functions: temp_return_type = library_functions[i["name"]]["type"]
+                            elif i["name"] in functions: temp_return_type = functions[i["name"]]["type"]
+                            else: error("'" + i["name"] + "'" + " " + "was not declared in this scope")
+
+                            temp_value = interpreter([j], file, False, False, functions, variables, temp_return_type, library_functions, include_folders, create_json)
+                            temp.append({"type": list(temp_value.keys())[0], "value": list(temp_value.values())[0]})
 
                         else:
                             temp.append(j)
