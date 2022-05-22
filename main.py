@@ -506,9 +506,7 @@ def parser(tokens, file, create_json):
 
     def get(index):
         try: return tokens[index]
-        except:
-            print(tokens, index)
-            error()
+        except: error()
 
     while len(tokens) > pos:
         if last_token["token"] == None or get(pos) != last_token["token"]:
@@ -1305,7 +1303,6 @@ def interpreter(ast, file, isbase = False, islib = False, functions = {}, variab
 
                     for index, j in enumerate(library_functions[i["name"]]["args"].values()):
                         if temp[index]["type"] != j and temp[index]["type"] not in ["NULL"]:
-                            print(temp[index], j)
                             error("argument types didn't match for" + " " + "'" + i["name"] + "'")
 
                     new_temp = {}
