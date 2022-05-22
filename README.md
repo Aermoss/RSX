@@ -40,7 +40,7 @@ int main() {
 ## How to make a library using R# header files
 ### library.rsxh
 ```c++
-#include "rsxio" : *;
+include "rsxio" : *;
 
 void log(string message) {
     std::rout(message);
