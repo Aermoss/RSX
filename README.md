@@ -1,8 +1,8 @@
-# RSharp
+# R#
 An interpreted programming language.
 ![rsharp logo](./icon.png)
 
-# How to use
+# Getting Started
 ## How to interprete the program
 ```python main.py --run main.rsx```
 
@@ -20,3 +20,6 @@ int main() {
     return 0;
 }
 ```
+
+# Libraries
+- rsxio
