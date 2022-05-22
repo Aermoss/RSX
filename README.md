@@ -5,7 +5,7 @@ An interpreted programming language.
 # Getting Started
 ## How to interprete the program
 ```
-python main.py --run main.rsx
+python main.py --interprete main.rsx
 ```
 
 ## How to transpile the program
