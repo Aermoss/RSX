@@ -29,7 +29,7 @@ library = pack_library()
 ```
 
 ### main.rsx
-```
+```c++
 include "library.py";
 
 int main() {
