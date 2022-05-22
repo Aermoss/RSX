@@ -1,0 +1,1 @@
+namespace std { include "rsxmath/rsxmath.py" : *; }
