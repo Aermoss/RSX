@@ -5,13 +5,13 @@ An interpreted programming language.
 # Getting Started
 ## How to interprete the program
 ```
-python main.py --interprete main.rsx
+python main.py main.rsx --interprete
 ```
 
 ## How to transpile the program
 ### Python
 ```
-python main.py --transpile-python main.rsx
+python main.py main.rsx --transpile-python
 ```
 
 ## How to make a library using python
@@ -35,6 +35,36 @@ include "library.py";
 int main() {
     library::log("Hello, World!");
 }
+```
+
+## How to make a library using R# header files
+### library.rsxh
+```c++
+#include "rsxio" : *;
+
+void log(string message) {
+    std::rout(message);
+    std::rout("\n");
+}
+```
+
+### main.rsx
+```c++
+include "library.rsxh";
+
+int main() {
+    library::log("Hello, World!");
+}
+```
+
+## How to add an include folder
+```
+python main.py main.rsx --interprete -Imy-include-folder
+```
+
+## How to create the json files for ast and tokens
+```
+python main.py main.rsx --interprete -ljson
 ```
 
 # Examples
