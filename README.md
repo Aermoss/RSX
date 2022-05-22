@@ -11,3 +11,12 @@ An interpreted programming language.
 ```python main.py --transpile-python main.rsx```
 
 # Exapmles
+## Hello, World!
+```c++
+include "rsxio" : *;
+
+int main() {
+    std::rout("Hello, World!");
+    return 0;
+}
+```
