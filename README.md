@@ -23,9 +23,18 @@ create_library("library")
 
 @create_function("VOID", {"message": "STRING"})
 def log(environment):
-    print(environment["args"]["message"])
+    print(environment["args"]["message"], flush = True)
 
 library = pack_library()
+```
+
+### main.rsx
+```
+include "library.py";
+
+int main() {
+    library::log("Hello, World!");
+}
 ```
 
 # Examples
