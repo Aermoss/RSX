@@ -14,6 +14,20 @@ python main.py --interprete main.rsx
 python main.py --transpile-python main.rsx
 ```
 
+## How to make a library using python
+### library.py
+```python
+from tools import *
+
+create_library("library")
+
+@create_function("VOID", {"message": "STRING"})
+def log(environment):
+    print(environment["args"]["message"])
+
+library = pack_library()
+```
+
 # Examples
 ## Hello, World!
 ```c++
