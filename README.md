@@ -4,11 +4,15 @@ An interpreted programming language.
 
 # Getting Started
 ## How to interprete the program
-```python main.py --run main.rsx```
+```
+python main.py --run main.rsx
+```
 
 ## How to transpile the program
 ### Python
-```python main.py --transpile-python main.rsx```
+```
+python main.py --transpile-python main.rsx
+```
 
 # Examples
 ## Hello, World!
