@@ -1272,7 +1272,7 @@ def main(argv):
             if command == "json":
                 create_json = True
 
-    if get(1, "no operation", "rsharp", "fatal error", True) == "--run":
+    if get(1, "no operation", "rsharp", "fatal error", True) == "--interprete":
         interpreter(parser(lexer(tools.read_file(file), file, create_json), file, create_json), file, True, False, include_folders = include_folders, create_json = create_json)
 
     elif get(1, "no operation", "rsharp", "fatal error", True) == "--transpile-python":
