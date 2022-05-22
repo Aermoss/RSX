@@ -10,7 +10,7 @@ An interpreted programming language.
 ### Python
 ```python main.py --transpile-python main.rsx```
 
-# Exapmles
+# Examples
 ## Hello, World!
 ```c++
 include "rsxio" : *;
@@ -23,3 +23,14 @@ int main() {
 
 # Libraries
 - rsxio
+- rsxf
+- rsxgui
+- rsxmath
+- rsxmixer
+- rsxrand
+- rsxraylib
+- rsxstr
+- rsxstd
+- rsxsys
+- rsxterm
+- rsxtime
