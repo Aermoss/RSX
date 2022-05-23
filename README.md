@@ -1,5 +1,5 @@
 # R#
-An interpreted programming language.
+An interpreted statically typed multi paradigm general purpose programming language designed for cross platform applications.
 ![rsharp logo](./icon.png)
 
 # Getting Started
