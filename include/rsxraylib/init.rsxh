@@ -1,2 +1,0 @@
-include "rsxraylib/rsxraylib.py" : *;
-include "rsxraylib/consts.rsxh" : *;
