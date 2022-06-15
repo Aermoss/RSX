@@ -1,6 +1,6 @@
 # R#
 An interpreted statically typed multi paradigm general purpose programming language designed for cross platform applications.
-![rsharp logo](./icon.png)
+![rsharp logo](rsharp/icon.png)
 
 # Getting Started
 ## How to interprete the program
