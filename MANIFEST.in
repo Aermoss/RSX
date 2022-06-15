@@ -1,0 +1,13 @@
+include rsharp/include/rsxf/*
+include rsharp/include/rsxgui/*
+include rsharp/include/rsxio/*
+include rsharp/include/rsxmath/*
+include rsharp/include/rsxmixer/*
+include rsharp/include/rsxrand/*
+include rsharp/include/rsxraylib/*
+include rsharp/include/rsxstd/*
+include rsharp/include/rsxstr/*
+include rsharp/include/rsxsys/*
+include rsharp/include/rsxterm/*
+include rsharp/include/rsxtime/*
+include rsharp/*
