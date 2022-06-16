@@ -1435,7 +1435,7 @@ def main(argv):
 
     file = get(0, "no input files", "rsharp", "fatal error", True)
 
-    include_folders = [f"{os.path.split(__file__)[0]}\include", "."]
+    include_folders = [f"{os.path.split(__file__)[0]}\include", ".", "C:\RSharp\include"]
     create_json = False
 
     for i in argv:
