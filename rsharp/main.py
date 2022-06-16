@@ -1438,7 +1438,7 @@ def main(argv):
     include_folders = [f"{os.path.split(__file__)[0]}\include", "."]
     create_json = False
 
-    for i in argv[3:]:
+    for i in argv:
         if i.startswith("-I"):
             include_folders.append(i[2:])
 
@@ -1448,14 +1448,14 @@ def main(argv):
             if command == "json":
                 create_json = True
 
-    if get(1, "no operation", "rsharp", "fatal error", True) == "--interprete":
+    if "--interprete" in argv:
         interpreter(parser(lexer(tools.read_file(file), file, create_json), file, create_json), file, True, False, include_folders = include_folders, create_json = create_json)
 
-    elif get(1, "no operation", "rsharp", "fatal error", True) == "--transpile-python":
+    elif "--transpile-python" in argv:
         transpiler.python(parser(lexer(tools.read_file(file), file, create_json), file, create_json), file)
 
     else:
-        tools.error("operation not found", "fatal error")
+        interpreter(parser(lexer(tools.read_file(file), file, create_json), file, create_json), file, True, False, include_folders = include_folders, create_json = create_json)
 
     return 0
 
