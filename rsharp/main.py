@@ -1013,7 +1013,7 @@ def interpreter(ast, file, isbase = False, islib = False, functions = {}, variab
         variables["__file__"] = {"type": "STRING", "value": {file: "STRING"}}
 
     def proccess_string(string):
-        return string.replace("\\n", "\n")
+        return string.replace("\\n", "\n").replace("\\\\", "\\").replace("\\t", "\t").replace("\\\"", "\"")
 
     if isbase:
         found_main = False

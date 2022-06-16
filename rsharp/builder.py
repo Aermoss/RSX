@@ -25,11 +25,11 @@ def build(path, name, console, imports):
 
     os.chdir(os.path.split(__main__.__file__)[0])
 
-    with open(path + name, "wb") as file:
+    with open(path.replace("\\", "/") + name, "wb") as file:
         file.write(data)
 
 def build_program(path, name, include_folders, console, imports):
-    with open(path + name, "r") as file:
+    with open(path.replace("\\", "/") + name, "r") as file:
         file_content = file.read()
 
     os.chdir(os.path.split(__file__)[0])
@@ -48,7 +48,7 @@ def build_program(path, name, include_folders, console, imports):
     code += "include_folders = ["
 
     for index, i in enumerate(include_folders):
-        code += "\"" + i + "\""
+        code += "\"" + i.replace("\\", "/") + "\""
 
         if index != len(include_folders) - 1:
             code += ", "
@@ -80,5 +80,7 @@ def build_program(path, name, include_folders, console, imports):
 
     os.chdir(os.path.split(__main__.__file__)[0])
 
-    with open(f"{os.path.splitext(path + name)[0]}.exe", "wb") as file:
+    name = os.path.splitext(path.replace("\\", "/") + name)[0] + ".exe"
+
+    with open(name, "wb") as file:
         file.write(data)

@@ -1,4 +1,5 @@
 import rsharp.main as core
+import rsharp.rsxlib as rsxlib
 
 import ctypes, sys
 import importlib, os

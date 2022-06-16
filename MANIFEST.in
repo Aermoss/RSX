@@ -1,3 +1,4 @@
+include rsharp/include/rsxbuild/*
 include rsharp/include/rsxf/*
 include rsharp/include/rsxgui/*
 include rsharp/include/rsxio/*

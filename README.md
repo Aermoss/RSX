@@ -41,10 +41,10 @@ int main() {
 ### library.rsxh
 ```c++
 include "rsxio" : *;
+include "rsxstr" : *;
 
 void log(string message) {
-    std::rout(message);
-    std::rout("\n");
+    std::rout(std::addstr(message, "\n"));
 }
 ```
 
@@ -78,7 +78,22 @@ int main() {
 }
 ```
 
+## Builder
+```c++
+include "rsxbuild" : *;
+
+int main() {
+    std::build_program(
+        ".\\", "main.rsx",
+        "C:\\RSharp\\include\\;include\\;.\\",
+        true, "raylib"
+    );
+    return 0;
+}
+```
+
 # Libraries
+- rsxbuild
 - rsxio
 - rsxf
 - rsxgui
