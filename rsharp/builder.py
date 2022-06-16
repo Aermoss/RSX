@@ -51,7 +51,7 @@ def build_program(path, name, include_folders, console, imports):
         code += "\"" + i + "\""
 
         if index != len(include_folders) - 1:
-            code +=  + ", "
+            code += ", "
 
     code += "]\n"
     code += "\n"
