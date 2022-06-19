@@ -16,12 +16,12 @@ def lexer(data, file, create_json):
         console_handle = ctypes.windll.kernel32.GetStdHandle(-11)
         ctypes.windll.kernel32. SetConsoleTextAttribute(console_handle, color)
 
-    def error(msg, file = file, type = "error", terminated = False):
+    def error(message, file = file, type = "error", terminated = False):
         print(f"{file}:", end = " ", flush = True)
         set_text_attr(12)
         print(f"{type}: ", end = "", flush = True)
         set_text_attr(7)
-        print(msg, end = "\n", flush = True)
+        print(message, end = "\n", flush = True)
         if terminated: print("program terminated.")
         sys.exit(-1)
 
@@ -74,9 +74,6 @@ def lexer(data, file, create_json):
         "string": "STRING",
         "class": "CLASS",
         "return": "RETURN",
-        "not": "NOT",
-        "and": "AND",
-        "or": "OR",
         "false": "FALSE",
         "true": "TRUE",
         "null": "NULL",
@@ -294,8 +291,10 @@ def lexer(data, file, create_json):
                             string += token
                             token = ""
 
-                        temp.append(state.upper())
-                        temp.append(string)
+                        if string != "":
+                            temp.append(state.upper())
+                            temp.append(string)
+
                         string = ""
                         state = None
 
@@ -410,8 +409,8 @@ def lexer(data, file, create_json):
                 current = col
                 found = False
 
-                while len(lines[row - 1]) >= current and lines[row - 1][current] in ["=", "<", ">", "|", "&", ")", "}", "]", ",", " "]:
-                    if lines[row - 1][current] in ["=", "<", ">", "|", "&", ")", "}", "]", ","]:
+                while len(lines[row - 1]) >= current and lines[row - 1][current] in ["=", "<", ">", "|", "&", ")", "}", "]", "!", ",", " "]:
+                    if lines[row - 1][current] in ["=", "<", ">", "|", "&", ")", "}", "]", "!", ","]:
                         found = True
 
                     current += 1
@@ -479,6 +478,285 @@ def lexer(data, file, create_json):
 
     return temp
 
+def parse_condition(condition_tokens, file, variables, functions):
+    pos = 0
+
+    last_token = {"token": None, "value": None}
+
+    def set_text_attr(color):
+        console_handle = ctypes.windll.kernel32.GetStdHandle(-11)
+        ctypes.windll.kernel32. SetConsoleTextAttribute(console_handle, color)
+
+    def error(message = "failed to parse the condition", file = file, type = "error", terminated = False, suggest = False):
+        print(f"{file}:", end = " ", flush = True)
+        set_text_attr(12)
+        print(f"{type}: ", end = "", flush = True)
+        set_text_attr(7)
+        print(message + ", current token: " + get(pos), end = "\n", flush = True)
+        if terminated: print("program terminated.")
+        sys.exit(-1)
+
+    def warning(message, file = file, type = "warning"):
+        print(f"{file}:", end = " ", flush = True)
+        set_text_attr(13)
+        print(f"{type}: ", end = "", flush = True)
+        set_text_attr(7)
+        print(message, end = "\n", flush = True)
+
+    def get(index):
+        try: return condition_tokens[index]
+        except: None
+
+    new_tokens = []
+
+    while len(condition_tokens) > pos:
+        if last_token["token"] == None or get(pos) != last_token["token"]:
+            last_token = {"token": get(pos), "value": 0}
+
+        elif get(pos) == last_token["token"]: last_token["value"] += 1
+        if last_token["value"] >= 1000: error()
+
+        if get(pos) == "NAME":
+            new_tokens.append(variables[get(pos + 1)]["type"])
+            new_tokens.append(list(variables[get(pos + 1)]["value"])[0])
+            pos += 2
+
+        elif get(pos) == "CALL":
+            error("function calls in conditions are not implemented")
+
+        else:
+            new_tokens.append(get(pos))
+            pos += 1
+
+    condition_tokens = new_tokens.copy()
+    new_tokens.clear()
+    pos = 0
+
+    while len(condition_tokens) > pos:
+        if last_token["token"] == None or get(pos) != last_token["token"]:
+            last_token = {"token": get(pos), "value": 0}
+
+        elif get(pos) == last_token["token"]: last_token["value"] += 1
+        if last_token["value"] >= 1000: error()
+
+        if get(pos) == "LPAREN":
+            condition_pos = pos
+            condition_pass = 0
+            temp_condition_tokens = []
+
+            while True:
+                if get(condition_pos) == "LPAREN":
+                    condition_pass += 1
+
+                elif get(condition_pos) == "RPAREN":
+                    condition_pass -= 1
+
+                    if condition_pass == 0:
+                        break
+
+                    condition_pos += 1
+
+                else:
+                    temp_condition_tokens.append(get(condition_pos))
+                    condition_pos += 1
+
+            new_tokens.append("BOOL")
+            new_tokens.append(parse_condition(temp_condition_tokens, file, variables, functions))
+            pos = condition_pos + 1
+
+        else:
+            new_tokens.append(get(pos))
+            pos += 1
+
+    condition_tokens = new_tokens.copy()
+    new_tokens.clear()
+    pos = 0
+
+    while len(condition_tokens) > pos:
+        if last_token["token"] == None or get(pos) != last_token["token"]:
+            last_token = {"token": get(pos), "value": 0}
+
+        elif get(pos) == last_token["token"]: last_token["value"] += 1
+        if last_token["value"] >= 1000: error()
+
+        if get(pos) == "NOT" and get(pos + 1) != "EQUALS":
+            if get(pos + 1) == "BOOL":
+                new_tokens.append("BOOL")
+
+                if get(pos + 2) == "TRUE":
+                    new_tokens.append("FALSE")
+
+                elif get(pos + 2) == "FALSE":
+                    new_tokens.append("TRUE")
+
+                else:
+                    error("unexpected value")
+
+            pos += 3
+
+        else:
+            new_tokens.append(get(pos))
+            pos += 1
+
+    condition_tokens = new_tokens.copy()
+    new_tokens.clear()
+    pos = 0
+
+    while len(condition_tokens) > pos:
+        if last_token["token"] == None or get(pos) != last_token["token"]:
+            last_token = {"token": get(pos), "value": 0}
+
+        elif get(pos) == last_token["token"]: last_token["value"] += 1
+        if last_token["value"] >= 1000: error()
+
+        if get(pos) == "EQUALSEQUALS":
+            left_type = get(pos - 2)
+            left_value = get(pos - 1)
+            right_type = get(pos + 1)
+            right_value = get(pos + 2)
+
+            new_tokens.append("BOOL")
+
+            if left_type != right_type:
+                new_tokens.append("FALSE")
+
+            else:
+                if left_value != right_value:
+                    new_tokens.append("FALSE")
+
+                else:
+                    new_tokens.append("TRUE")
+
+            pos += 3
+
+        elif get(pos) == "NOT" and get(pos + 1) == "EQUALS":
+            left_type = get(pos - 2)
+            left_value = get(pos - 1)
+            right_type = get(pos + 2)
+            right_value = get(pos + 3)
+
+            new_tokens.append("BOOL")
+
+            if left_type != right_type:
+                new_tokens.append("TRUE")
+
+            else:
+                if left_value != right_value:
+                    new_tokens.append("TRUE")
+
+                else:
+                    new_tokens.append("FALSE")
+
+            pos += 4
+
+        elif get(pos) in ["INT", "FLOAT", "STRING", "BOOL"]:
+            if not ((get(pos + 2) == "EQUALSEQUALS") or (get(pos + 2) == "NOT" and get(pos + 3) == "EQUALS")):
+                new_tokens.append(get(pos))
+                new_tokens.append(get(pos + 1))
+
+            pos += 2
+
+        elif get(pos) in ["AND", "OR"]:
+            new_tokens.append(get(pos))
+            pos += 1
+
+        else:
+            error("unexpected token")
+
+    condition_tokens = new_tokens.copy()
+    new_tokens.clear()
+    pos = 0
+
+    while len(condition_tokens) > pos:
+        if last_token["token"] == None or get(pos) != last_token["token"]:
+            last_token = {"token": get(pos), "value": 0}
+
+        elif get(pos) == last_token["token"]: last_token["value"] += 1
+        if last_token["value"] >= 1000: error()
+
+        if get(pos) == "AND":
+            left_type = get(pos - 2)
+            left_value = get(pos - 1)
+            right_type = get(pos + 1)
+            right_value = get(pos + 2)
+
+            new_tokens.append("BOOL")
+
+            if left_type == "BOOL" and right_type == "BOOL":
+                if left_value == "TRUE" and right_value == "TRUE":
+                    new_tokens.append("TRUE")
+
+                else:
+                    new_tokens.append("FALSE")
+
+            else:
+                error("unexpected type")
+
+            pos += 3
+
+            for index, i in enumerate(condition_tokens):
+                if index >= pos:
+                    new_tokens.append(get(index))
+
+            condition_tokens = new_tokens.copy()
+            new_tokens.clear()
+            pos = 0
+
+        elif get(pos) == "OR":
+            left_type = get(pos - 2)
+            left_value = get(pos - 1)
+            right_type = get(pos + 1)
+            right_value = get(pos + 2)
+
+            new_tokens.append("BOOL")
+
+            if left_type == "BOOL" and right_type == "BOOL":
+                if left_value == "TRUE" or right_value == "TRUE":
+                    new_tokens.append("TRUE")
+
+                else:
+                    new_tokens.append("FALSE")
+
+            else:
+                error("unexpected type")
+
+            pos += 3
+
+            for index, i in enumerate(condition_tokens):
+                if index >= pos:
+                    new_tokens.append(get(index))
+
+            condition_tokens = new_tokens.copy()
+            new_tokens.clear()
+            pos = 0
+
+        elif get(pos) == "BOOL":
+            if get(pos + 2) not in ["AND", "OR"]:
+                new_tokens.append(get(pos))
+                new_tokens.append(get(pos + 1))
+
+            pos += 2
+
+        else:
+            error("unexpected token")
+
+    if len(new_tokens) == 2:
+        if new_tokens[0] == "BOOL":
+            if new_tokens[1] == "TRUE":
+                return True
+
+            elif new_tokens[1] == "FALSE":
+                return False
+
+            else:
+                error("unexpected value")
+
+        else:
+            error("unexpected type")
+
+    else:
+        error("unexpected error")
+
 def parser(tokens, file, create_json):
     ast = []
     pos = 0
@@ -489,12 +767,13 @@ def parser(tokens, file, create_json):
         console_handle = ctypes.windll.kernel32.GetStdHandle(-11)
         ctypes.windll.kernel32. SetConsoleTextAttribute(console_handle, color)
 
-    def error(msg = "failed to generate the ast", file = file, type = "error", terminated = False, suggest = False):
+    def error(message = "failed to generate the ast", file = file, type = "error", terminated = False, suggest = False):
         print(f"{file}:", end = " ", flush = True)
         set_text_attr(12)
         print(f"{type}: ", end = "", flush = True)
         set_text_attr(7)
-        print(msg, end = "\n", flush = True)
+        print(message + ", current token: " + get(pos), end = "\n", flush = True)
+        print(get(pos - 5), get(pos - 4), get(pos - 3), get(pos - 2), get(pos - 1), get(pos), get(pos + 1), get(pos + 2), get(pos + 3), get(pos + 4), get(pos + 5))
         if terminated: print("program terminated.")
 
         if suggest:
@@ -551,6 +830,87 @@ def parser(tokens, file, create_json):
                     ast.append({"type": "namespace", "name": get(pos + 2), "ast": parser(new_tokens, file, create_json)})
                     pos = new_pos + 1
 
+        elif get(pos) in ["IF", "ELSE", "WHILE"]:
+            first_pos = pos
+
+            if get(pos) == "ELSE":
+                if get(pos + 1) == "IF":
+                    pos += 1
+
+                elif get(pos + 1) == "LPAREN":
+                    error("expected '{' but found '('")
+
+            if get(pos + 1) == "LPAREN":
+                condition_pos = pos + 1
+                condition_pass = 0
+                condition_tokens = []
+
+                while True:
+                    if get(condition_pos) == "LPAREN":
+                        if condition_pass != 0:
+                            condition_tokens.append(get(condition_pos))
+
+                        condition_pass += 1
+                        condition_pos += 1
+
+                    elif get(condition_pos) == "RPAREN":
+                        condition_pass -= 1
+
+                        if condition_pass == 0:
+                            break
+
+                        condition_tokens.append(get(condition_pos))
+                        condition_pos += 1
+
+                    else:
+                        condition_tokens.append(get(condition_pos))
+                        condition_pos += 1
+
+                pos = condition_pos
+
+            func_pos = pos + 1
+            func_pass = 0
+            func_tokens = []
+
+            while True:
+                if get(func_pos) == "LCURLYBRACKET":
+                    if func_pass != 0:
+                        func_tokens.append(get(func_pos))
+
+                    func_pass += 1
+                    func_pos += 1
+
+                elif get(func_pos) == "RCURLYBRACKET":
+                    func_pass -= 1
+
+                    if func_pass == 0:
+                        break
+
+                    func_tokens.append(get(func_pos))
+                    func_pos += 1
+
+                else:
+                    func_tokens.append(get(func_pos))
+                    func_pos += 1
+
+            if get(first_pos) == "ELSE":
+                if get(first_pos + 1) == "IF":
+                    name = get(first_pos).lower() + " " + get(first_pos + 1).lower()
+
+                else:
+                    name = get(first_pos).lower()
+
+            else:
+                name = get(first_pos).lower()
+
+            temp_ast = {"type": name, "ast": parser(func_tokens, file, False)}
+
+            if (get(first_pos) in ["IF", "WHILE"]) or (get(first_pos) == "ELSE" and get(first_pos + 1) == "IF"):
+                temp_ast["condition"] = condition_tokens
+
+            ast.append(temp_ast)
+            pos = func_pos + 1
+
         elif get(pos) == "RETURN":
             if get(pos + 1) == "SEMICOLON":
                 ast.append({"type": get(pos).lower(), "value": {None: None}})
@@ -562,17 +922,18 @@ def parser(tokens, file, create_json):
 
             elif get(pos + 1) == "CALL":
                 if get(pos + 3) == "LPAREN":
-                    args, arg_value = [], None
+                    args = []
+                    arg_value = None
                     arg_pos = pos + 4
-                    arg_ignore = 0
+                    arg_pass = 0
 
                     while True:
                         if get(arg_pos) == "LPAREN":
-                            arg_ignore += 1
+                            arg_pass += 1
                             arg_pos += 1
 
                         elif get(arg_pos) == "RPAREN":
-                            if arg_ignore == 0:
+                            if arg_pass == 0:
                                 if arg_value != None:
                                     args.append(arg_value)
                                     arg_value = None
@@ -580,7 +941,7 @@ def parser(tokens, file, create_json):
                                 break
 
                             else:
-                                arg_ignore -= 1
+                                arg_pass -= 1
                                 arg_pos += 1
 
                         elif get(arg_pos) in ["VOID", "BOOL", "INT", "FLOAT", "STRING", "NAME", "NULL"]:
@@ -664,15 +1025,15 @@ def parser(tokens, file, create_json):
                     if get(pos + 5) == "LPAREN":
                         args, arg_value = [], None
                         arg_pos = pos + 6
-                        arg_ignore = 0
+                        arg_pass = 0
 
                         while True:
                             if get(arg_pos) == "LPAREN":
-                                arg_ignore += 1
+                                arg_pass += 1
                                 arg_pos += 1
 
                             elif get(arg_pos) == "RPAREN":
-                                if arg_ignore == 0:
+                                if arg_pass == 0:
                                     if arg_value != None:
                                         args.append(arg_value)
                                         arg_value = None
@@ -680,7 +1041,7 @@ def parser(tokens, file, create_json):
                                     break
 
                                 else:
-                                    arg_ignore -= 1
+                                    arg_pass -= 1
                                     arg_pos += 1
 
                             elif get(arg_pos) in ["VOID", "BOOL", "INT", "FLOAT", "STRING", "NAME", "NULL"]:
@@ -738,15 +1099,15 @@ def parser(tokens, file, create_json):
             if get(pos + 2) == "LPAREN":
                 args, arg_value = [], None
                 arg_pos = pos + 3
-                arg_ignore = 0
+                arg_pass = 0
 
                 while True:
                     if get(arg_pos) == "LPAREN":
-                        arg_ignore += 1
+                        arg_pass += 1
                         arg_pos += 1
 
                     elif get(arg_pos) == "RPAREN":
-                        if arg_ignore == 0:
+                        if arg_pass == 0:
                             if arg_value != None:
                                 args.append(arg_value)
                                 arg_value = None
@@ -754,7 +1115,7 @@ def parser(tokens, file, create_json):
                             break
 
                         else:
-                            arg_ignore -= 1
+                            arg_pass -= 1
                             arg_pos += 1
 
                     elif get(arg_pos) in ["VOID", "BOOL", "INT", "FLOAT", "STRING", "NAME", "NULL"]:
@@ -811,15 +1172,15 @@ def parser(tokens, file, create_json):
                         if get(pos + 6) == "LPAREN":
                             args, arg_value = [], None
                             arg_pos = pos + 7
-                            arg_ignore = 0
+                            arg_pass = 0
 
                             while True:
                                 if get(arg_pos) == "LPAREN":
-                                    arg_ignore += 1
+                                    arg_pass += 1
                                     arg_pos += 1
 
                                 elif get(arg_pos) == "RPAREN":
-                                    if arg_ignore == 0:
+                                    if arg_pass == 0:
                                         if arg_value != None:
                                             args.append(arg_value)
                                             arg_value = None
@@ -827,7 +1188,7 @@ def parser(tokens, file, create_json):
                                         break
 
                                     else:
-                                        arg_ignore -= 1
+                                        arg_pass -= 1
                                         arg_pos += 1
 
                                 elif get(arg_pos) in ["VOID", "BOOL", "INT", "FLOAT", "STRING", "NAME", "NULL"]:
@@ -908,15 +1269,15 @@ def parser(tokens, file, create_json):
             elif get(pos + 3) == "LPAREN":
                 args, arg_type, arg_name = {}, None, None
                 arg_pos = pos + 4
-                arg_ignore = 0
+                arg_pass = 0
 
                 while True:
                     if get(arg_pos) == "LPAREN":
-                        arg_ignore += 1
+                        arg_pass += 1
                         arg_pos += 1
 
                     elif get(arg_pos) == "RPAREN":
-                        if arg_ignore == 0:
+                        if arg_pass == 0:
                             if arg_name != None and arg_type != None:
                                 args[arg_name] = arg_type
                                 arg_type, arg_name = None, None
@@ -924,7 +1285,7 @@ def parser(tokens, file, create_json):
                             break
 
                         else:
-                            arg_ignore -= 1
+                            arg_pass -= 1
                             arg_pos += 1
 
                     elif get(arg_pos) in ["VOID", "BOOL", "INT", "FLOAT", "STRING"]:
@@ -987,7 +1348,7 @@ def parser(tokens, file, create_json):
 
     return ast
 
-def interpreter(ast, file, isbase = False, islib = False, functions = {}, variables = {}, return_type = None, library_functions = {}, include_folders = [], create_json = False):
+def interpreter(ast, file, isbase, islib, functions, variables, return_type, library_functions, include_folders, create_json):
     def set_text_attr(color):
         console_handle = ctypes.windll.kernel32.GetStdHandle(-11)
         ctypes.windll.kernel32. SetConsoleTextAttribute(console_handle, color)
@@ -1018,6 +1379,9 @@ def interpreter(ast, file, isbase = False, islib = False, functions = {}, variab
     if isbase:
         found_main = False
         define_standards(file, functions, variables, library_functions, include_folders)
+
+    index = 0
+    result_report = {}
 
     for i in ast:
         if i["type"] == "func":
@@ -1060,7 +1424,7 @@ def interpreter(ast, file, isbase = False, islib = False, functions = {}, variab
                     value = None
 
                     if list(variables[i["value"]]["value"].values())[0] == "INT":
-                        value = int(list(variables[i["value"]]["value"].keys())[0]) + 1 if i["type"] == "increment" else -1
+                        value = str(int(list(variables[i["value"]]["value"].keys())[0]) + 1 if i["type"] == "increment" else -1)
 
                     elif list(variables[i["value"]]["value"].values())[0] == "FLOAT":
                         value = str(float(list(variables[i["value"]]["value"].keys())[0].lower().replace("f", "")) + (1 if i["type"] == "increment" else -1)) + "f"
@@ -1239,6 +1603,46 @@ def interpreter(ast, file, isbase = False, islib = False, functions = {}, variab
                     functions.update(temp[1])
                     library_functions.update(temp[2])
 
+        elif i["type"] == "while":
+            condition = parse_condition(i["condition"], file, variables, functions)
+            result_report[index] = condition
+
+            while condition:
+                condition = parse_condition(i["condition"], file, variables, functions)
+                interpreter(i["ast"], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
+
+        elif i["type"] == "if":
+            condition = parse_condition(i["condition"], file, variables, functions)
+
+            result_report[index] = condition
+
+            if condition:
+                interpreter(i["ast"], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
+
+        elif i["type"] == "else if":
+            if ast[index - 1]["type"] in ["if", "else if"]:
+                if not result_report[index - 1]:
+                    condition = parse_condition(i["condition"], file, variables, functions)
+
+                    result_report[index] = condition
+
+                    if condition:
+                        interpreter(i["ast"], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
+
+                else:
+                    result_report[index] = True
+
+            else:
+                error("couldn't find any statements")
+
+        elif i["type"] == "else":
+            if ast[index - 1]["type"] in ["if", "else if", "while"]:
+                if not result_report[index - 1]:
+                    interpreter(i["ast"], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
+
+            else:
+                error("couldn't find any statements")
+
         elif i["type"] == "return":
             if isbase or islib:
                 error("return keyword only can be use in functions")
@@ -1413,6 +1817,11 @@ def interpreter(ast, file, isbase = False, islib = False, functions = {}, variab
             else:
                 error("'" + i["name"] + "'" + " " + "was not declared in this scope")
 
+        else:
+            warning("undeclared" + " " + "'" + i["type"] + "'" + " " + "was passed")
+
+        index += 1
+
     if isbase:
         if not found_main:
             error("no entry point")
@@ -1433,6 +1842,8 @@ def main(argv):
         try: return argv[index + 1]
         except IndexError: tools.error(message, file, type, terminated)
 
+    version = "0.0.5"
+
     file = get(0, "no input files", "rsharp", "fatal error", True)
 
     include_folders = [f"{os.path.split(__file__)[0]}\include", ".", "C:\RSharp\include"]
@@ -1449,13 +1860,16 @@ def main(argv):
                 create_json = True
 
     if "--interprete" in argv:
-        interpreter(parser(lexer(tools.read_file(file), file, create_json), file, create_json), file, True, False, include_folders = include_folders, create_json = create_json)
+        interpreter(parser(lexer(tools.read_file(file), file, create_json), file, create_json), file, True, False, {}, {}, None, {}, include_folders, create_json)
 
     elif "--transpile-python" in argv:
         transpiler.python(parser(lexer(tools.read_file(file), file, create_json), file, create_json), file)
 
+    elif "--version" in argv:
+        print(f"R# {version}")
+
     else:
-        interpreter(parser(lexer(tools.read_file(file), file, create_json), file, create_json), file, True, False, include_folders = include_folders, create_json = create_json)
+        interpreter(parser(lexer(tools.read_file(file), file, create_json), file, create_json), file, True, False, {}, {}, None, {}, include_folders, create_json)
 
     return 0
 
