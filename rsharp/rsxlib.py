@@ -1,4 +1,6 @@
-import os, inspect
+import sys, os, inspect
+
+sys.dont_write_bytecode = True
 
 def begin():
     global f_locals

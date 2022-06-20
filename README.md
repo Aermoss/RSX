@@ -94,6 +94,7 @@ int main() {
 
 # Libraries
 - rsxbuild
+- rsxthread
 - rsxio
 - rsxf
 - rsxgui

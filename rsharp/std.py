@@ -1,6 +1,8 @@
-from rsharp.tools import *
+import sys, os
 
-import os
+sys.dont_write_bytecode = True
+
+from rsharp.tools import *
 
 create_library("std")
 

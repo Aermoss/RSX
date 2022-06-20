@@ -1348,7 +1348,7 @@ def parser(tokens, file, create_json):
 
     return ast
 
-def interpreter(ast, file, isbase, islib, functions, variables, return_type, library_functions, include_folders, create_json):
+def interpreter(ast, file, isbase, islib, functions, variables, return_type, library_functions, include_folders, create_json, already_included = [], pre_included = []):
     def set_text_attr(color):
         console_handle = ctypes.windll.kernel32.GetStdHandle(-11)
         ctypes.windll.kernel32. SetConsoleTextAttribute(console_handle, color)
@@ -1460,7 +1460,6 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                 if value == None:
                     error("unknown type")
 
-
                 variables[i["name"]] = {"type": i["value_type"], "value": {value: i["value_type"]}}
 
             elif "type" in i["value"]:
@@ -1534,6 +1533,15 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                     error("'" + i["name"] + "'" + " " + "was not declared in this scope")
 
         elif i["type"] == "include":
+            if i["value"] in already_included:
+                warning("trying to include '" + i["value"] + "' twice")
+                continue
+
+            if i["value"] in pre_included:
+                continue
+
+            already_included.append(i["value"])
+
             name, ext = os.path.splitext(i["value"])
 
             if ext == ".py":
@@ -1759,7 +1767,7 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                         "include_folders": include_folders,
                         "create_json": create_json
                     }
-                    
+
                     returned = library_functions[i["name"]]["func"](enviroment)
 
                     if returned == None: returned = {"NULL": "NULL"}
@@ -1842,11 +1850,11 @@ def main(argv):
         try: return argv[index + 1]
         except IndexError: tools.error(message, file, type, terminated)
 
-    version = "0.0.5"
+    version = "0.0.6"
 
     file = get(0, "no input files", "rsharp", "fatal error", True)
 
-    include_folders = [f"{os.path.split(__file__)[0]}\include", ".", "C:\RSharp\include"]
+    include_folders = [f"{os.path.split(__file__)[0]}\\include\\", "C:\\RSharp\\include\\", ".\\include\\", ".\\"]
     create_json = False
 
     for i in argv:

@@ -6,16 +6,51 @@ import importlib, os
 
 import __main__
 
-def read_file(file_path):
-        return open(file_path, "r").read() + "\n"
+def read_file(file):
+    return open(file, "r").read() + "\n"
 
-def include_library(file, namespace, enviroment):
+def load_module(name):
+    sys.path.append(f"{os.path.split(__file__)[0]}\\include\\{name}")
+    return __import__(name)
+
+def auto_include(file, include_folders):
+    ast = core.parser(
+        tokens = core.lexer(
+            read_file(
+                file = file
+            ),
+            file = file,
+            create_json = False
+        ),
+        file = file,
+        create_json = False
+    )
+
+    variables, functions, library_functions, files = {}, {}, {}, []
+
+    for i in ast:
+        if i["type"] == "include":
+            include_library(
+                file = i["value"],
+                namespace = i["all"] == False,
+                include_folders = include_folders,
+                variables = variables,
+                functions = functions,
+                library_functions = library_functions,
+                create_json = False
+            )
+
+            files.append(i["value"])
+
+    return variables, functions, library_functions, files
+
+def include_library(file, namespace, include_folders, variables, functions, library_functions, create_json):
     name, ext = os.path.splitext(file)
 
     if ext == ".py":
         file_path = None
         
-        for j in enviroment["include_folders"]:
+        for j in include_folders:
             if os.path.exists(j + "/" + file):
                 file_path = j + "/" + file
                 break
@@ -33,22 +68,22 @@ def include_library(file, namespace, enviroment):
             for j in temp["functions"].keys():
                 library["functions"][os.path.split(name)[1] + "." + j] = temp["functions"][j]
 
-            enviroment["library_functions"].update(library["functions"])
+            library_functions.update(library["functions"])
         
         else:
-            enviroment["library_functions"].update(temp["functions"])
+            library_functions.update(temp["functions"])
 
     else:
         file_path = None
 
         if ext == ".rsxh":
-            for j in enviroment["include_folders"]:
+            for j in include_folders:
                 if os.path.exists(j + "/" + file):
                     file_path = j + "/" + file
                     break
 
         else:
-            for j in enviroment["include_folders"]:
+            for j in include_folders:
                 if os.path.exists(j + "/" + file + "/" + "init.rsxh"):
                     file_path = j + "/" + file + "/" + "init.rsxh"
                     break
@@ -56,7 +91,7 @@ def include_library(file, namespace, enviroment):
         if file_path == None:
             error("'" + file + "'" + " " + "was not found")
 
-        temp = core.interpreter(core.parser(core.lexer(read_file(file_path), file_path, enviroment["create_json"]), file_path, enviroment["create_json"]), file_path, False, False, {}, {}, None, {}, enviroment["include_folders"], enviroment["create_json"])
+        temp = core.interpreter(core.parser(core.lexer(read_file(file_path), file_path, create_json), file_path, create_json), file_path, False, False, {}, {}, None, {}, include_folders, create_json)
 
         if namespace:
             library = {"functions": {}, "variables": {}}
@@ -67,14 +102,14 @@ def include_library(file, namespace, enviroment):
             for j in temp[0].keys():
                 library["variables"][os.path.split(file)[1] + "." + j] = temp[0][j]
 
-            enviroment["variables"].update(library["variables"])
-            enviroment["functions"].update(library["functions"])
+            variables.update(library["variables"])
+            functions.update(library["functions"])
         
         else:
-            enviroment["variables"].update(temp[0])
-            enviroment["functions"].update(temp[1])
+            variables.update(temp[0])
+            functions.update(temp[1])
 
-        enviroment["library_functions"].update(temp[2])
+        library_functions.update(temp[2])
 
 def set_text_attr(color):
     console_handle = ctypes.windll.kernel32.GetStdHandle(-11)
