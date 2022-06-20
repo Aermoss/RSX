@@ -86,7 +86,7 @@ int main() {
     std::build_program(
         ".\\", "main.rsx",
         "C:\\RSharp\\include\\;include\\;.\\",
-        true, "raylib"
+        true
     );
     return 0;
 }

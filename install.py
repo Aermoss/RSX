@@ -9,6 +9,11 @@ def main(argv):
     with open("rsharp.exe", "rb") as file:
         data = file.read()
 
+    shutil.rmtree("build")
+    shutil.rmtree("dist")
+    shutil.rmtree("rsharp.egg-info")
+    os.remove("rsharp.exe")
+
     if "RSharp" in os.listdir("C:\\"):
         shutil.rmtree("C:\\RSharp")
 

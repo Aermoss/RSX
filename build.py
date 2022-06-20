@@ -7,8 +7,5 @@ import rsharp as rsx
 rsx.builder.build(
     path = os.path.split(__file__)[0] + "\\",
     name = "rsharp.exe",
-    console = True,
-    imports = [
-        "raylib"
-    ]
+    console = True
 )
