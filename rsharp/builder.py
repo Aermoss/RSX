@@ -4,13 +4,14 @@ import rsharp as rsx
 
 import __main__
 
-def build(path, name, console, hidden_imports = ["raylib"]):
+def build(path, console, hidden_imports = ["raylib"]):
     if console: console = "--console"
     else: console = "--noconsole"
     hidden_imports_str = ""
     for i in hidden_imports: hidden_imports_str += "--hidden-import=" + i + " "
 
-    os.chdir(os.path.split(__file__)[0])
+    first_dir = os.getcwd()
+    os.chdir(rsx.tools.get_dir())
     os.system(f"pyinstaller main.py {console} --noconfirm --onefile --clean --paths=include --icon=icon.ico {hidden_imports_str}")
 
     with open("dist/main.exe", "rb") as file:
@@ -23,16 +24,17 @@ def build(path, name, console, hidden_imports = ["raylib"]):
     if "__pycache__" in os.listdir():
         shutil.rmtree("__pycache__", ignore_errors = True)
 
-    os.chdir(os.path.split(__main__.__file__)[0])
+    os.chdir(first_dir)
 
-    with open(path.replace("\\", "/") + name, "wb") as file:
+    with open(path.replace("\\", "/"), "wb") as file:
         file.write(data)
 
-def build_program(path, name, include_folders, console, variables, functions, library_functions, pre_included = [], hidden_imports = ["raylib"], icon = "icon.ico"):
-    with open(path.replace("\\", "/") + name, "r") as file:
+def build_program(path, include_folders, console, variables, functions, library_functions, pre_included = [], hidden_imports = ["raylib"], icon = "icon.ico"):
+    with open(path.replace("\\", "/"), "r") as file:
         file_content = file.read()
 
-    os.chdir(os.path.split(__file__)[0])
+    first_dir = os.getcwd()
+    os.chdir(rsx.tools.get_dir())
 
     modules = []
 
@@ -72,7 +74,7 @@ def build_program(path, name, include_folders, console, variables, functions, li
     code += f"functions = " + str(functions).replace("'", "\"") + "\n"
     code += f"library_functions = {new_library_functions}\n"
     code += "create_json = False\n"
-    code += f"name = \"{name}\"\n"
+    code += f"path = \"{path}\"\n"
     code += f"include_folders = {str(include_folders)}\n"
     code += f"pre_included = {str(pre_included)}\n"
     code += "\n"
@@ -80,13 +82,13 @@ def build_program(path, name, include_folders, console, variables, functions, li
     code += "    rsx.core.parser(\n"
     code += "        rsx.core.lexer(\n"
     code += "            data = code,\n"
-    code += "            file = name,\n"
+    code += "            file = path,\n"
     code += "            create_json = create_json\n"
     code += "        ),"
-    code += "        file = name,\n"
+    code += "        file = path,\n"
     code += "        create_json = create_json\n"
     code += "    ),\n"
-    code += "    file = name,\n"
+    code += "    file = path,\n"
     code += "    isbase = True,\n"
     code += "    islib = False,\n"
     code += "    functions = functions,\n"
@@ -146,13 +148,12 @@ def build_program(path, name, include_folders, console, variables, functions, li
     shutil.rmtree("dist", ignore_errors = True)
     os.remove("temp.spec")
     os.remove("temp.py")
-        
+
     if "__pycache__" in os.listdir():
         shutil.rmtree("__pycache__", ignore_errors = True)
 
-    os.chdir(os.path.split(__main__.__file__)[0])
-
-    name = os.path.splitext(path.replace("\\", "/") + name)[0] + ".exe"
+    os.chdir(first_dir)
+    name = os.path.splitext(path.replace("\\", "/"))[0] + ".exe"
 
     with open(name, "wb") as file:
         file.write(data)

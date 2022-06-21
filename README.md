@@ -81,14 +81,17 @@ int main() {
 ## Builder
 ```c++
 include "rsxbuild" : *;
+include "rsxstr" : *;
+include "rsxsys" : *;
+include "rsxio" : *;
 
 int main() {
+    std::rout("file name > ");
     std::build_program(
-        ".\\", "main.rsx",
-        "C:\\RSharp\\include\\;include\\;.\\",
-        true
-    );
-    return 0;
+        std::rin(),
+        std::addstr(std::getdir(), "\\include\\"),
+        true, std::addstr(std::getdir(), "\\icon.ico")
+    ); return 0;
 }
 ```
 
@@ -107,3 +110,4 @@ int main() {
 - rsxsys
 - rsxterm
 - rsxtime
+- rsxos

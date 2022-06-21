@@ -18,7 +18,9 @@ def main(argv):
         shutil.rmtree("C:\\RSharp")
 
     os.mkdir("C:\\RSharp")
-    shutil.copytree(".\\rsharp\\include", "C:\\RSharp\\include")
+    shutil.copytree(".\\rsharp\\include", "C:\\RSharp\\include\\")
+    shutil.copy(".\\rsharp\\icon.ico", "C:\\RSharp\\")
+    shutil.copy(".\\rsharp\\icon.png", "C:\\RSharp\\")
     os.chdir("C:\\RSharp")
 
     with open("rsharp.exe", "wb") as file:

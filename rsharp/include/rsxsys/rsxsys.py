@@ -18,6 +18,10 @@ def exit(environment):
     sys.exit(environment["args"]["code"])
 
 @create_function("VOID", {"message": "STRING"})
+def warning(environment):
+    warning(environment["args"]["message"], environment["file"])
+
+@create_function("VOID", {"message": "STRING"})
 def error(environment):
     error(environment["args"]["message"], environment["file"])
 
@@ -35,7 +39,15 @@ def includelib(environment):
     include_library(environment["args"]["name"], environment["args"]["namespace"], environment)
 
 @create_function("VOID", {"dir": "STRING"})
-def add_includedir(environment):
+def addlibdir(environment):
     environment["include_folders"].append(environment["args"]["dir"])
+
+@create_function("BOOL", {})
+def iscompiled(environment):
+    return is_compiled()
+
+@create_function("STRING", {})
+def getdir(environment):
+    return get_dir()
 
 rsxsys = pack_library()

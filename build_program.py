@@ -19,8 +19,7 @@ variables, functions, library_functions, files = rsx.tools.auto_include(
 )
 
 rsx.builder.build_program(
-    path = "",
-    name = file,
+    path = file,
     include_folders = include_folders,
     console = True,
     variables = variables,

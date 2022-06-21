@@ -9,8 +9,25 @@ import __main__
 def read_file(file):
     return open(file, "r").read() + "\n"
 
+def is_compiled():
+    if os.path.splitext(os.path.split(sys.executable)[1])[0] == os.path.splitext(os.path.split(sys.argv[0])[1])[0] and os.path.splitext(os.path.split(sys.argv[0])[1])[1] in [".exe", ""]:
+        return True
+
+    return False
+
+def get_dir():
+    if is_compiled():
+        if os.path.split(sys.argv[0])[0] not in [".", ""]:
+            return os.path.split(sys.argv[0])[0] + "\\"
+
+        else:
+            return "C:\\RSharp\\"
+
+    else:
+        return os.path.split(__file__)[0]
+
 def load_module(name):
-    sys.path.append(f"{os.path.split(__file__)[0]}\\include\\{name}")
+    sys.path.append(f"{get_dir()}\\include\\{name}")
     return __import__(name)
 
 def auto_include(file, include_folders):
@@ -89,7 +106,7 @@ def include_library(file, namespace, include_folders, variables, functions, libr
                     break
 
         if file_path == None:
-            error("'" + file + "'" + " " + "was not found")
+            error("'" + file + "'" + " " + "was not found", file)
 
         temp = core.interpreter(core.parser(core.lexer(read_file(file_path), file_path, create_json), file_path, create_json), file_path, False, False, {}, {}, None, {}, include_folders, create_json)
 
@@ -125,11 +142,11 @@ def error(message, file, type = "error", terminated = False):
     sys.exit(-1)
 
 def warning(message, file, type = "warning"):
-        print(f"{file}:", end = " ", flush = True)
-        set_text_attr(13)
-        print(f"{type}: ", end = "", flush = True)
-        set_text_attr(7)
-        print(message, end = "\n", flush = True)
+    print(f"{file}:", end = " ", flush = True)
+    set_text_attr(13)
+    print(f"{type}: ", end = "", flush = True)
+    set_text_attr(7)
+    print(message, end = "\n", flush = True)
 
 def create_library(name):
     setattr(__main__, "name", name)

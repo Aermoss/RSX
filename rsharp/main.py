@@ -10,6 +10,7 @@ import string as strlib
 import rsharp.transpiler as transpiler
 import rsharp.tools as tools
 import rsharp.std as std
+import rsharp.builder as builder
 
 def lexer(data, file, create_json):
     def set_text_attr(color):
@@ -158,6 +159,10 @@ def lexer(data, file, create_json):
 
         elif char in ["!", "<", ">", "=", "-", "+", "*", "/", "|", "&"]:
             if state == "string":
+                if token != "":
+                    string += token
+                    token = ""
+
                 string += char
 
             else:
@@ -207,6 +212,20 @@ def lexer(data, file, create_json):
 
                         string += char
 
+                    if string == "PLUSPLUS":
+                        temp.append("INCREMENT")
+                        temp.append(token)
+                        string = ""
+                        token = ""
+                        state = None
+
+                    elif string == "--":
+                        temp.append("DECREMENT")
+                        temp.append(token)
+                        string = ""
+                        token = ""
+                        state = None
+
                     if state == "name" and char == ":":
                         string += char
 
@@ -215,17 +234,7 @@ def lexer(data, file, create_json):
 
                     if char == ";":
                         if state == "token":
-                            if string == "PLUSPLUS":
-                                temp.append("INCREMENT")
-                                temp.append(token)
-
-                            elif string == "--":
-                                temp.append("DECREMENT")
-                                temp.append(token)
-
-                            else:
-                                temp.append(string)
-
+                            temp.append(string)
                             string = ""
                             token = ""
                             state = None
@@ -243,14 +252,8 @@ def lexer(data, file, create_json):
                                 temp.append(string)
 
                             else:
-                                if string == "--":
-                                    temp.append("DECREMENT")
-                                    temp.append(token)
-                                    token = ""
-
-                                else:
-                                    temp.append("INT")
-                                    temp.append(string)
+                                temp.append("INT")
+                                temp.append(string)
 
                             state = None
                             string = ""
@@ -421,7 +424,7 @@ def lexer(data, file, create_json):
                         set_text_attr(12)
                         print("error: ", end = "", flush = True)
                         set_text_attr(7)
-                        print(f"'{token[:-1]}' was not declared in this scope", end = "\n", flush = True)
+                        print(f"unexpected token: '{token[:-1]}'", end = "\n", flush = True)
 
                         print(lines[row - 1][:col - 1 - len(token[:-1])], end = "", flush = True)
                         set_text_attr(12)
@@ -617,15 +620,46 @@ def parse_condition(condition_tokens, file, variables, functions):
 
             new_tokens.append("BOOL")
 
-            if left_type != right_type:
+            if left_type in ["INT", "FLOAT"] and right_type in ["INT", "FLOAT"]:
+                if (left_type == "INT" and right_type == "FLOAT") or (left_type == "FLOAT" and right_type == "INT"):
+                    if right_type == "FLOAT":
+                        right_value = float(right_value.replace("f", ""))
+                        left_value = float(left_value)
+
+                    elif left_type == "FLOAT":
+                        right_value = float(right_value)
+                        left_value = float(left_value.replace("f", ""))
+
+                elif (left_type == "INT" and right_type == "INT") or (left_type == "FLOAT" and right_type == "FLOAT"):
+                    if left_type == "INT" and right_type == "INT":
+                        left_value = int(left_value)
+                        right_value = int(right_value)
+
+                    elif left_type == "FLOAT" and right_type == "FLOAT":
+                        left_value = float(left_value.replace("f", ""))
+                        right_value = float(right_value.replace("f", ""))
+
+                else:
+                    error("unexpected error")
+                    
+                if left_value == right_value:
+                    new_tokens.append("TRUE")
+
+                else:
+                    new_tokens.append("FALSE")
+
+            elif left_type != right_type:
                 new_tokens.append("FALSE")
 
-            else:
+            elif left_type == "STRING" and right_type == "STRING":
                 if left_value != right_value:
                     new_tokens.append("FALSE")
 
                 else:
                     new_tokens.append("TRUE")
+
+            else:
+                error("unexpected error")
 
             pos += 3
 
@@ -637,20 +671,98 @@ def parse_condition(condition_tokens, file, variables, functions):
 
             new_tokens.append("BOOL")
 
-            if left_type != right_type:
-                new_tokens.append("TRUE")
+            if left_type in ["INT", "FLOAT"] and right_type in ["INT", "FLOAT"]:
+                if (left_type == "INT" and right_type == "FLOAT") or (left_type == "FLOAT" and right_type == "INT"):
+                    if right_type == "FLOAT":
+                        right_value = float(right_value.replace("f", ""))
+                        left_value = float(left_value)
 
-            else:
+                    elif left_type == "FLOAT":
+                        right_value = float(right_value)
+                        left_value = float(left_value.replace("f", ""))
+
+                elif (left_type == "INT" and right_type == "INT") or (left_type == "FLOAT" and right_type == "FLOAT"):
+                    if left_type == "INT" and right_type == "INT":
+                        left_value = int(left_value)
+                        right_value = int(right_value)
+
+                    elif left_type == "FLOAT" and right_type == "FLOAT":
+                        left_value = float(left_value.replace("f", ""))
+                        right_value = float(right_value.replace("f", ""))
+
+                else:
+                    error("unexpected error")
+
                 if left_value != right_value:
                     new_tokens.append("TRUE")
 
                 else:
                     new_tokens.append("FALSE")
 
+            elif left_type != right_type:
+                new_tokens.append("TRUE")
+
+            elif left_type == "STRING" and right_type == "STRING":
+                if left_value != right_value:
+                    new_tokens.append("TRUE")
+
+                else:
+                    new_tokens.append("FALSE")
+
+            else:
+                error("unexpected error")
+
             pos += 4
 
+        elif get(pos) in ["LESS", "LESSEQUALS", "GREATER", "GREATEREQUALS"]:
+            left_type = get(pos - 2)
+            left_value = get(pos - 1)
+            right_type = get(pos + 1)
+            right_value = get(pos + 2)
+
+            new_tokens.append("BOOL")
+
+            if left_type in ["INT", "FLOAT"] and right_type in ["INT", "FLOAT"]:
+                if (left_type == "INT" and right_type == "FLOAT") or (left_type == "FLOAT" and right_type == "INT"):
+                    if right_type == "FLOAT":
+                        right_value = float(right_value.replace("f", ""))
+                        left_value = float(left_value)
+
+                    elif left_type == "FLOAT":
+                        right_value = float(right_value)
+                        left_value = float(left_value.replace("f", ""))
+
+                elif (left_type == "INT" and right_type == "INT") or (left_type == "FLOAT" and right_type == "FLOAT"):
+                    if left_type == "INT" and right_type == "INT":
+                        left_value = int(left_value)
+                        right_value = int(right_value)
+
+                    elif left_type == "FLOAT" and right_type == "FLOAT":
+                        left_value = float(left_value.replace("f", ""))
+                        right_value = float(right_value.replace("f", ""))
+
+                else:
+                    error("unexpected error")
+
+                if get(pos) == "LESS": condition = left_value < right_value
+                elif get(pos) == "LESSEQUALS": condition = left_value <= right_value
+                elif get(pos) == "GREATER": condition = left_value > right_value
+                elif get(pos) == "GREATEREQUALS": condition = left_value >= right_value
+                else: error("unexpected error")
+
+                if condition:
+                    new_tokens.append("TRUE")
+
+                else:
+                    new_tokens.append("FALSE")
+
+            else:
+                error("unexpected type")
+
+            pos += 3
+
         elif get(pos) in ["INT", "FLOAT", "STRING", "BOOL"]:
-            if not ((get(pos + 2) == "EQUALSEQUALS") or (get(pos + 2) == "NOT" and get(pos + 3) == "EQUALS")):
+            if not ((get(pos + 2) in ["EQUALSEQUALS", "LESS", "LESSEQUALS", "GREATER", "GREATEREQUALS"]) or (get(pos + 2) == "NOT" and get(pos + 3) == "EQUALS")):
                 new_tokens.append(get(pos))
                 new_tokens.append(get(pos + 1))
 
@@ -773,7 +885,6 @@ def parser(tokens, file, create_json):
         print(f"{type}: ", end = "", flush = True)
         set_text_attr(7)
         print(message + ", current token: " + get(pos), end = "\n", flush = True)
-        print(get(pos - 5), get(pos - 4), get(pos - 3), get(pos - 2), get(pos - 1), get(pos), get(pos + 1), get(pos + 2), get(pos + 3), get(pos + 4), get(pos + 5))
         if terminated: print("program terminated.")
 
         if suggest:
@@ -830,6 +941,87 @@ def parser(tokens, file, create_json):
                     ast.append({"type": "namespace", "name": get(pos + 2), "ast": parser(new_tokens, file, create_json)})
                     pos = new_pos + 1
 
+        elif get(pos) == "FOR":
+            if get(pos + 1) == "LPAREN":
+                temp_pos = pos + 1
+                temp_pass = 0
+                temp_part = 0
+                temp_tokens = {0: [], 1: [], 2: []}
+
+                while True:
+                    if get(temp_pos) == "LPAREN":
+                        if temp_pass != 0:
+                            temp_tokens[temp_part].append(get(temp_pos))
+
+                        temp_pass += 1
+                        temp_pos += 1
+
+                    elif get(temp_pos) == "RPAREN":
+                        temp_pass -= 1
+
+                        if temp_pass == 0:
+                            if len(temp_tokens[temp_part]) != 0:
+                                temp_tokens[temp_part].append("SEMICOLON")
+
+                            break
+
+                        temp_tokens[temp_part].append(get(temp_pos))
+                        temp_pos += 1
+
+                    elif get(temp_pos) in ["LCURLYBRACKET"]:
+                        error("expected ')'")
+
+                    elif get(temp_pos) == "SEMICOLON":
+                        if temp_part != 1:
+                            if len(temp_tokens[temp_part]) != 0:
+                                temp_tokens[temp_part].append(get(temp_pos))
+
+                        temp_part += 1
+                        temp_pos += 1
+
+                    else:
+                        temp_tokens[temp_part].append(get(temp_pos))
+                        temp_pos += 1
+
+                func_pos = temp_pos + 1
+                func_pass = 0
+                func_tokens = []
+                
+                if get(func_pos) != "LCURLYBRACKET":
+                    while True:
+                        if get(func_pos) == "SEMICOLON":
+                            func_tokens.append(get(func_pos))
+                            break
+
+                        else:
+                            func_tokens.append(get(func_pos))
+                            func_pos += 1
+
+                else:
+                    while True:
+                        if get(func_pos) == "LCURLYBRACKET":
+                            if func_pass != 0:
+                                func_tokens.append(get(func_pos))
+
+                            func_pass += 1
+                            func_pos += 1
+
+                        elif get(func_pos) == "RCURLYBRACKET":
+                            func_pass -= 1
+
+                            if func_pass == 0:
+                                break
+
+                            func_tokens.append(get(func_pos))
+                            func_pos += 1
+
+                        else:
+                            func_tokens.append(get(func_pos))
+                            func_pos += 1
+
+                ast.append({"type": "for", "ast": parser(func_tokens, file, False), "init": parser(temp_tokens[0], file, False), "condition": temp_tokens[1], "update": parser(temp_tokens[2], file, False)})
+                pos = func_pos + 1
+
         elif get(pos) in ["IF", "ELSE", "WHILE"]:
             first_pos = pos
 
@@ -857,10 +1049,16 @@ def parser(tokens, file, create_json):
                         condition_pass -= 1
 
                         if condition_pass == 0:
+                            if condition_tokens[len(condition_tokens) - 1] in ["AND", "OR"]:
+                                error(f"expected a value after: '{condition_tokens[len(condition_tokens) - 1].lower()}'")
+
                             break
 
                         condition_tokens.append(get(condition_pos))
                         condition_pos += 1
+
+                    elif get(condition_pos) in ["LCURLYBRACKET"]:
+                        error("expected ')'")
 
                     else:
                         condition_tokens.append(get(condition_pos))
@@ -871,27 +1069,38 @@ def parser(tokens, file, create_json):
             func_pos = pos + 1
             func_pass = 0
             func_tokens = []
-
-            while True:
-                if get(func_pos) == "LCURLYBRACKET":
-                    if func_pass != 0:
+            
+            if get(func_pos) != "LCURLYBRACKET":
+                while True:
+                    if get(func_pos) == "SEMICOLON":
                         func_tokens.append(get(func_pos))
-
-                    func_pass += 1
-                    func_pos += 1
-
-                elif get(func_pos) == "RCURLYBRACKET":
-                    func_pass -= 1
-
-                    if func_pass == 0:
                         break
 
-                    func_tokens.append(get(func_pos))
-                    func_pos += 1
+                    else:
+                        func_tokens.append(get(func_pos))
+                        func_pos += 1
 
-                else:
-                    func_tokens.append(get(func_pos))
-                    func_pos += 1
+            else:
+                while True:
+                    if get(func_pos) == "LCURLYBRACKET":
+                        if func_pass != 0:
+                            func_tokens.append(get(func_pos))
+
+                        func_pass += 1
+                        func_pos += 1
+
+                    elif get(func_pos) == "RCURLYBRACKET":
+                        func_pass -= 1
+
+                        if func_pass == 0:
+                            break
+
+                        func_tokens.append(get(func_pos))
+                        func_pos += 1
+
+                    else:
+                        func_tokens.append(get(func_pos))
+                        func_pos += 1
 
             if get(first_pos) == "ELSE":
                 if get(first_pos + 1) == "IF":
@@ -1376,14 +1585,15 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
     def proccess_string(string):
         return string.replace("\\n", "\n").replace("\\\\", "\\").replace("\\t", "\t").replace("\\\"", "\"")
 
-    if isbase:
-        found_main = False
+    if isbase or islib:
+        if isbase:
+            found_main = False
+
         define_standards(file, functions, variables, library_functions, include_folders)
 
-    index = 0
     result_report = {}
 
-    for i in ast:
+    for index, i in enumerate(ast):
         if i["type"] == "func":
             if i["name"] in functions or i["name"] in library_functions:
                 error("can't overload a function")
@@ -1424,7 +1634,7 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                     value = None
 
                     if list(variables[i["value"]]["value"].values())[0] == "INT":
-                        value = str(int(list(variables[i["value"]]["value"].keys())[0]) + 1 if i["type"] == "increment" else -1)
+                        value = str(int(list(variables[i["value"]]["value"].keys())[0]) + (1 if i["type"] == "increment" else -1))
 
                     elif list(variables[i["value"]]["value"].values())[0] == "FLOAT":
                         value = str(float(list(variables[i["value"]]["value"].keys())[0].lower().replace("f", "")) + (1 if i["type"] == "increment" else -1)) + "f"
@@ -1611,30 +1821,34 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                     functions.update(temp[1])
                     library_functions.update(temp[2])
 
-        elif i["type"] == "while":
-            condition = parse_condition(i["condition"], file, variables, functions)
-            result_report[index] = condition
+        elif i["type"] == "for":
+            interpreter(i["init"], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
+            condition = parse_condition(i["condition"], file, variables, functions) if len(i["condition"]) != 0 else True
 
             while condition:
-                condition = parse_condition(i["condition"], file, variables, functions)
                 interpreter(i["ast"], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
+                interpreter(i["update"], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
+                condition = parse_condition(i["condition"], file, variables, functions) if len(i["condition"]) != 0 else True
+
+        elif i["type"] == "while":
+            result_report[index] = parse_condition(i["condition"], file, variables, functions)
+
+            while result_report[index] == True:
+                interpreter(i["ast"], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
+                condition = parse_condition(i["condition"], file, variables, functions)
 
         elif i["type"] == "if":
-            condition = parse_condition(i["condition"], file, variables, functions)
+            result_report[index] = parse_condition(i["condition"], file, variables, functions)
 
-            result_report[index] = condition
-
-            if condition:
+            if result_report[index]:
                 interpreter(i["ast"], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
 
         elif i["type"] == "else if":
-            if ast[index - 1]["type"] in ["if", "else if"]:
+            if ast[index]["type"] in ["if", "else if"] and (index - 1 in result_report):
                 if not result_report[index - 1]:
-                    condition = parse_condition(i["condition"], file, variables, functions)
+                    result_report[index] = parse_condition(i["condition"], file, variables, functions)
 
-                    result_report[index] = condition
-
-                    if condition:
+                    if result_report[index]:
                         interpreter(i["ast"], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
 
                 else:
@@ -1644,7 +1858,8 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                 error("couldn't find any statements")
 
         elif i["type"] == "else":
-            if ast[index - 1]["type"] in ["if", "else if", "while"]:
+            if ast[index - 1]["type"] in ["if", "else if", "while"] and (index - 1 in result_report):
+
                 if not result_report[index - 1]:
                     interpreter(i["ast"], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
 
@@ -1828,8 +2043,6 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
         else:
             warning("undeclared" + " " + "'" + i["type"] + "'" + " " + "was passed")
 
-        index += 1
-
     if isbase:
         if not found_main:
             error("no entry point")
@@ -1850,12 +2063,13 @@ def main(argv):
         try: return argv[index + 1]
         except IndexError: tools.error(message, file, type, terminated)
 
-    version = "0.0.6"
+    version = "0.0.7"
 
     file = get(0, "no input files", "rsharp", "fatal error", True)
 
-    include_folders = [f"{os.path.split(__file__)[0]}\\include\\", "C:\\RSharp\\include\\", ".\\include\\", ".\\"]
+    include_folders = [f"{tools.get_dir()}\\include\\", "C:\\RSharp\\include\\", ".\\include\\", ".\\"]
     create_json = False
+    console = True
 
     for i in argv:
         if i.startswith("-I"):
@@ -1867,11 +2081,30 @@ def main(argv):
             if command == "json":
                 create_json = True
 
+            elif command == "noconsole":
+                console = False
+
     if "--interprete" in argv:
         interpreter(parser(lexer(tools.read_file(file), file, create_json), file, create_json), file, True, False, {}, {}, None, {}, include_folders, create_json)
 
     elif "--transpile-python" in argv:
         transpiler.python(parser(lexer(tools.read_file(file), file, create_json), file, create_json), file)
+
+    elif "--compile" in argv:
+        variables, functions, library_functions, files = tools.auto_include(
+            file = file,
+            include_folders = include_folders
+        )
+
+        builder.build_program(
+            path = file,
+            include_folders = include_folders,
+            console = console,
+            variables = variables,
+            functions = functions,
+            library_functions = library_functions,
+            pre_included = files,
+        )
 
     elif "--version" in argv:
         print(f"R# {version}")
