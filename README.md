@@ -3,9 +3,21 @@ An interpreted statically typed multi paradigm general purpose programming langu
 ![rsharp logo](rsharp/icon.png)
 
 # Getting Started
+## How to install
+### Windows
+```
+start install.bat
+```
+
 ## How to interprete the program
 ```
 python main.py main.rsx --interprete
+```
+
+# Getting Started
+## How to compile the program
+```
+python main.py main.rsx --compile
 ```
 
 ## How to transpile the program
