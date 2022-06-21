@@ -651,6 +651,13 @@ def parse_condition(condition_tokens, file, variables, functions):
             elif left_type != right_type:
                 new_tokens.append("FALSE")
 
+            elif left_type == "BOOL" and right_type == "BOOL":
+                if left_value != right_value:
+                    new_tokens.append("FALSE")
+
+                else:
+                    new_tokens.append("TRUE")
+
             elif left_type == "STRING" and right_type == "STRING":
                 if left_value != right_value:
                     new_tokens.append("FALSE")
@@ -701,6 +708,13 @@ def parse_condition(condition_tokens, file, variables, functions):
 
             elif left_type != right_type:
                 new_tokens.append("TRUE")
+
+            elif left_type == "BOOL" and right_type == "BOOL":
+                if left_value != right_value:
+                    new_tokens.append("TRUE")
+
+                else:
+                    new_tokens.append("FALSE")
 
             elif left_type == "STRING" and right_type == "STRING":
                 if left_value != right_value:
@@ -1823,22 +1837,22 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
 
         elif i["type"] == "for":
             interpreter(i["init"], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
-            condition = parse_condition(i["condition"], file, variables, functions) if len(i["condition"]) != 0 else True
+            condition = parse_condition(i["condition"].copy(), file, variables, functions) if len(i["condition"]) != 0 else True
 
             while condition:
                 interpreter(i["ast"], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
                 interpreter(i["update"], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
-                condition = parse_condition(i["condition"], file, variables, functions) if len(i["condition"]) != 0 else True
+                condition = parse_condition(i["condition"].copy(), file, variables, functions) if len(i["condition"]) != 0 else True
 
         elif i["type"] == "while":
-            result_report[index] = parse_condition(i["condition"], file, variables, functions)
+            result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions)
 
-            while result_report[index] == True:
+            while result_report[index]:
                 interpreter(i["ast"], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
-                condition = parse_condition(i["condition"], file, variables, functions)
+                result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions)
 
         elif i["type"] == "if":
-            result_report[index] = parse_condition(i["condition"], file, variables, functions)
+            result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions)
 
             if result_report[index]:
                 interpreter(i["ast"], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
@@ -1846,7 +1860,7 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
         elif i["type"] == "else if":
             if ast[index]["type"] in ["if", "else if"] and (index - 1 in result_report):
                 if not result_report[index - 1]:
-                    result_report[index] = parse_condition(i["condition"], file, variables, functions)
+                    result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions)
 
                     if result_report[index]:
                         interpreter(i["ast"], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
