@@ -1,13 +1,37 @@
 import rsharp.main as core
 import rsharp.rsxlib as rsxlib
 
-import ctypes, sys
-import importlib, os
+import sys, os, string
+import importlib, ctypes
 
 import __main__
 
 def read_file(file):
     return open(file, "r").read() + "\n"
+
+def check_name(value, file):
+    temp_value = []
+    should_done = False
+
+    for index, i in enumerate(value):
+        if i in string.ascii_letters + string.digits + "_" + "." + ":":
+            if not should_done:
+                if index == 0:
+                    if i in string.digits:
+                        error(f"invalid character in '{value}': '{i}'", file)
+
+                temp_value.append(i)
+
+            else:
+                error(f"invalid character in '{value}': '{i}'", file)
+
+        elif i == " ":
+            should_done = True
+
+        else:
+            error(f"invalid character in '{value}': '{i}'", file)
+
+    return "".join(temp_value)
 
 def is_compiled():
     if os.path.splitext(os.path.split(sys.executable)[1])[0] == os.path.splitext(os.path.split(sys.argv[0])[1])[0] and os.path.splitext(os.path.split(sys.argv[0])[1])[1] in [".exe", ""]:
