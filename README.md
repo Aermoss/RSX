@@ -14,7 +14,6 @@ start install.bat
 python main.py main.rsx --interprete
 ```
 
-# Getting Started
 ## How to compile the program
 ```
 python main.py main.rsx --compile
