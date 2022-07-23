@@ -2,12 +2,12 @@ import sys, os
 
 sys.dont_write_bytecode = True
 
-from rsharp.tools import *
+import rsharp.tools as tools
 
-create_library("std")
+tools.create_library("std")
 
-@create_function("VOID", {"command": "STRING"})
+@tools.create_function("VOID", {"command": "STRING"})
 def system(environment):
     os.system(environment["args"]["command"])
 
-std = pack_library()
+std = tools.pack_library()

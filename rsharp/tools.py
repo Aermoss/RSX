@@ -203,7 +203,7 @@ def create_variables(variables):
         create_variable(i, variables[i])
 
 def run_function(name, enviroment):
-    temp = core.interpreter(enviroment["functions"][name]["ast"], enviroment["file"], False, False, enviroment["functions"], enviroment["variables"], enviroment["functions"][name]["type"], enviroment["library_functions"])
+    temp = core.interpreter(enviroment["functions"][name]["ast"], enviroment["file"], False, False, enviroment["functions"], enviroment["variables"], enviroment["functions"][name]["type"], enviroment["library_functions"], enviroment["create_json"])
 
     if temp == None: return None
     if list(temp.keys())[0] == "INT": return int(list(temp.values())[0])

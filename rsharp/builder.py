@@ -40,7 +40,8 @@ def build_program(path, include_folders, console, variables, functions, library_
 
     for i in library_functions:
         if library_functions[i]["func"].__module__ not in modules:
-            modules.append(library_functions[i]["func"].__module__)
+            if library_functions[i]["func"].__module__ not in ["rsharp.std"]:
+                modules.append(library_functions[i]["func"].__module__)
 
     code = "import rsharp as rsx\n"
     code += "\n"
@@ -99,7 +100,7 @@ def build_program(path, include_folders, console, variables, functions, library_
     code += "    create_json = create_json,\n"
     code += "    pre_included = pre_included\n"
     code += ")"
-    
+
     with open("temp.py", "w") as file:
         file.write(code)
 

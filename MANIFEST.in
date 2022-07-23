@@ -11,4 +11,5 @@ include rsharp/include/rsxstr/*
 include rsharp/include/rsxsys/*
 include rsharp/include/rsxterm/*
 include rsharp/include/rsxtime/*
+include rsharp/include/rsxthread/*
 include rsharp/*

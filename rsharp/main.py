@@ -1,7 +1,6 @@
 import sys, os
 
-from sympy import posify
-
+sys.setrecursionlimit(5000)
 sys.dont_write_bytecode = True
 
 import importlib
@@ -93,7 +92,7 @@ def lexer(data, file, create_json):
         # "throw": "THROW",
         # "catch": "CATCH",
         # "const": "CONST",
-        # "using": "USING",
+        "using": "USING",
         # "struct": "STRUCT",
         # "new": "NEW",
         "delete": "DELETE",
@@ -492,7 +491,7 @@ def lexer(data, file, create_json):
 
     return temp
 
-def parse_condition(condition_tokens, file, variables, functions):
+def parse_condition(condition_tokens, file, variables, functions, library_functions, include_folders, create_json):
     pos = 0
 
     last_token = {"token": None, "value": None}
@@ -521,6 +520,51 @@ def parse_condition(condition_tokens, file, variables, functions):
         try: return condition_tokens[index]
         except: None
 
+    def get_call_args(current_pos):
+        temp_tokens = []
+        args = []
+        ignore = 0
+
+        while True:
+            if get(current_pos) == "LPAREN":
+                if ignore != 0:
+                    temp_tokens.append("LPAREN")
+
+                ignore += 1
+                current_pos += 1
+
+            elif get(current_pos) == "RPAREN":
+                ignore -= 1
+
+                if ignore == 0:
+                    if len(temp_tokens) != 0:
+                        temp_tokens.append("SEMICOLON")
+                        args.append(parser(temp_tokens, file, create_json)[0])
+                        temp_tokens.clear()
+
+                    break
+
+                temp_tokens.append("RPAREN")
+                current_pos += 1
+
+            elif get(current_pos) == "COMMA":
+                if ignore == 1:
+                    if len(temp_tokens) != 0:
+                        temp_tokens.append("SEMICOLON")
+                        args.append(parser(temp_tokens, file, create_json)[0])
+                        temp_tokens.clear()
+                
+                else:
+                    temp_tokens.append("COMMA")
+
+                current_pos += 1
+            
+            else:
+                temp_tokens.append(get(current_pos))
+                current_pos += 1
+
+        return args, current_pos + 1
+
     new_tokens = []
 
     while len(condition_tokens) > pos:
@@ -536,7 +580,13 @@ def parse_condition(condition_tokens, file, variables, functions):
             pos += 2
 
         elif get(pos) == "CALL":
-            error("function calls in conditions are not implemented")
+            if get(pos + 2) == "LPAREN":
+                name = get(pos + 1)
+                args, pos = get_call_args(pos + 2)
+                ast = [{"type": "call", "name": name, "args": args}]
+                value = interpreter(ast, file, False, False, functions, variables, None, library_functions, include_folders, create_json)
+                new_tokens.append(value["type"])
+                new_tokens.append(value["value"])
 
         else:
             new_tokens.append(get(pos))
@@ -1189,6 +1239,13 @@ def parser(tokens, file, create_json):
             else:
                 ast.append({"type": name, "ast": temp_ast})
 
+        elif get(pos) == "USING":
+            if get(pos + 1) == "NAMESPACE":
+                if get(pos + 2) == "NAME":
+                    if get(pos + 4) == "SEMICOLON":
+                        ast.append({"type": "using namespace", "name": get(pos + 3)})
+                        pos += 5
+
         elif get(pos) == "DO":
             first_pos = pos
             temp_ast, pos = get_func_ast(pos + 1)
@@ -1399,7 +1456,7 @@ def parser(tokens, file, create_json):
 
     return ast
 
-def interpreter(ast, file, isbase, islib, functions, variables, return_type, library_functions, include_folders, create_json, already_included = [], pre_included = []):
+def interpreter(ast, file, isbase, islib, functions, variables, return_type, library_functions, include_folders, create_json, svariables = {}, sfunctions = {}, already_included = [], pre_included = []):
     def set_text_attr(color):
         console_handle = ctypes.windll.kernel32.GetStdHandle(-11)
         ctypes.windll.kernel32. SetConsoleTextAttribute(console_handle, color)
@@ -1451,7 +1508,7 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
             if i["name"] == "main" and i["return_type"] == "INT" and i["args"] == {} and not found_main:
                 if isbase:
                     found_main = True
-                    error_code = interpreter(functions[i["name"]]["ast"], file, False, False, functions, variables, i["return_type"], library_functions, include_folders, create_json)
+                    error_code = interpreter(functions[i["name"]]["ast"], file, False, False, functions, variables, i["return_type"], library_functions, include_folders, create_json, variables.copy(), functions.copy())
                     
                     if error_code in ["BREAK", "CONTINUE"]:
                         error("cant use '" + error_code.lower() + "' here")
@@ -1728,12 +1785,16 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
             sec_temp_variables, sec_temp_functions, sec_temp_library_functions = variables.copy(), functions.copy(), library_functions.copy()
             interpreter(i["init"].copy(), file, False, False, functions, variables, None, library_functions, include_folders, create_json)
             temp_variables, temp_functions, temp_library_functions = variables.copy(), functions.copy(), library_functions.copy()
-            condition = parse_condition(i["condition"].copy(), file, variables, functions) if len(i["condition"]) != 0 else True
+            condition = parse_condition(i["condition"].copy(), file, variables, functions, library_functions, include_folders, create_json) if len(i["condition"]) != 0 else True
 
             while condition:
                 response = interpreter(i["ast"].copy(), file, False, False, functions, variables, None, library_functions, include_folders, create_json)
-                interpreter(i["update"].copy(), file, False, False, functions, variables, None, library_functions, include_folders, create_json)
-                condition = parse_condition(i["condition"].copy(), file, variables, functions) if len(i["condition"]) != 0 else True
+                interpreter(i["update"].copy(), file, False, False, functions, variables, "PASS", library_functions, include_folders, create_json)
+                if response != None:
+                    if "type" in response:
+                        if response["type"] != "NULL":
+                            return response
+                condition = parse_condition(i["condition"].copy(), file, variables, functions, library_functions, include_folders, create_json) if len(i["condition"]) != 0 else True
 
                 for j in list(set(variables) - set(temp_variables)): del variables[j]
                 for j in list(set(functions) - set(temp_functions)): del functions[j]
@@ -1746,7 +1807,11 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
 
         elif i["type"] == "do":
             temp_variables, temp_functions, temp_library_functions = variables.copy(), functions.copy(), library_functions.copy()
-            response = interpreter(i["ast"].copy(), file, False, False, functions, variables, None, library_functions, include_folders, create_json)
+            response = interpreter(i["ast"].copy(), file, False, False, functions, variables, "PASS", library_functions, include_folders, create_json)
+            if response != None:
+                if "type" in response:
+                    if response["type"] != "NULL":
+                        return response
 
             for j in list(set(variables) - set(temp_variables)): del variables[j]
             for j in list(set(functions) - set(temp_functions)): del functions[j]
@@ -1757,11 +1822,15 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
         elif i["type"] == "do while":
             temp_variables, temp_functions, temp_library_functions = variables.copy(), functions.copy(), library_functions.copy()
             interpreter(i["ast"].copy(), file, False, False, functions, variables, None, library_functions, include_folders, create_json)
-            result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions)
+            result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions, library_functions, include_folders, create_json)
 
             while result_report[index]:
-                response = interpreter(i["ast"].copy(), file, False, False, functions, variables, None, library_functions, include_folders, create_json)
-                result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions)
+                response = interpreter(i["ast"].copy(), file, False, False, functions, variables, "PASS", library_functions, include_folders, create_json)
+                if response != None:
+                    if "type" in response:
+                        if response["type"] != "NULL":
+                            return response
+                result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions, library_functions, include_folders, create_json)
 
                 for j in list(set(variables) - set(temp_variables)): del variables[j]
                 for j in list(set(functions) - set(temp_functions)): del functions[j]
@@ -1774,11 +1843,15 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
 
         elif i["type"] == "while":
             temp_variables, temp_functions, temp_library_functions = variables.copy(), functions.copy(), library_functions.copy()
-            result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions)
+            result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions, library_functions, include_folders, create_json)
 
             while result_report[index]:
-                response = interpreter(i["ast"].copy(), file, False, False, functions, variables, None, library_functions, include_folders, create_json)
-                result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions)
+                response = interpreter(i["ast"].copy(), file, False, False, functions, variables, "PASS", library_functions, include_folders, create_json)
+                if response != None:
+                    if "type" in response:
+                        if response["type"] != "NULL":
+                            return response
+                result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions, library_functions, include_folders, create_json)
 
                 for j in list(set(variables) - set(temp_variables)): del variables[j]
                 for j in list(set(functions) - set(temp_functions)): del functions[j]
@@ -1787,11 +1860,15 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
 
         elif i["type"] == "if":
             temp_variables, temp_functions, temp_library_functions = variables.copy(), functions.copy(), library_functions.copy()
-            result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions)
+            result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions, library_functions, include_folders, create_json)
 
             if result_report[index]:
-                response = interpreter(i["ast"].copy(), file, False, False, functions, variables, None, library_functions, include_folders, create_json)
+                response = interpreter(i["ast"].copy(), file, False, False, functions, variables, "PASS", library_functions, include_folders, create_json)
                 if response in ["BREAK", "CONTINUE"]: return response
+                if response != None:
+                    if "type" in response:
+                        if response["type"] != "NULL":
+                            return response
 
                 for j in list(set(variables) - set(temp_variables)): del variables[j]
                 for j in list(set(functions) - set(temp_functions)): del functions[j]
@@ -1802,11 +1879,15 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
 
             if ast[index]["type"] in ["if", "else if"] and (index - 1 in result_report):
                 if not result_report[index - 1]:
-                    result_report[index] = parse_condition(i["condition"], file, variables, functions)
+                    result_report[index] = parse_condition(i["condition"], file, variables, functions, library_functions, include_folders, create_json)
 
                     if result_report[index]:
-                        response = interpreter(i["ast"].copy(), file, False, False, functions, variables, None, library_functions, include_folders, create_json)
+                        response = interpreter(i["ast"].copy(), file, False, False, functions, variables, "PASS", library_functions, include_folders, create_json)
                         if response in ["BREAK", "CONTINUE"]: return response
+                        if response != None:
+                            if "type" in response:
+                                if response["type"] != "NULL":
+                                    return response
 
                         for j in list(set(variables) - set(temp_variables)): del variables[j]
                         for j in list(set(functions) - set(temp_functions)): del functions[j]
@@ -1824,8 +1905,12 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
             if ast[index - 1]["type"] in ["if", "else if", "while"] and (index - 1 in result_report):
 
                 if not result_report[index - 1]:
-                    response = interpreter(i["ast"].copy(), file, False, False, functions, variables, None, library_functions, include_folders, create_json)
+                    response = interpreter(i["ast"].copy(), file, False, False, functions, variables, "PASS", library_functions, include_folders, create_json)
                     if response in ["BREAK", "CONTINUE"]: return response
+                    if response != None:
+                        if "type" in response:
+                            if response["type"] != "NULL":
+                                return response
 
                     for j in list(set(variables) - set(temp_variables)): del variables[j]
                     for j in list(set(functions) - set(temp_functions)): del functions[j]
@@ -1834,11 +1919,21 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
             else:
                 error("couldn't find any statements")
 
+        elif i["type"] == "using namespace":
+            for j in library_functions.copy():
+                if i["name"] + "::" in j:
+                    library_functions[j.replace(i["name"] + "::", "")] = library_functions[j]
+
+            for j in functions.copy():
+                if i["name"] + "::" in j:
+                    functions[j.replace(i["name"] + "::", "")] = functions[j]
+
+            for j in variables.copy():
+                if i["name"] + "::" in j:
+                    variables[j.replace(i["name"] + "::", "")] = variables[j]
+
         elif i["type"] == "return":
             if isbase or islib:
-                error("return can only be used in functions")
-
-            if return_type == None:
                 error("return can only be used in functions")
 
             if return_type == "VOID":
@@ -1847,7 +1942,7 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
 
             returned = interpreter([i["value"]], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
 
-            if returned["type"] != return_type:
+            if returned["type"] != return_type and return_type not in ["PASS"]:
                 error("expected '" + return_type.lower() + "' got '" + returned["type"].lower() + "'")
             
             return returned
@@ -1944,13 +2039,19 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                         if temp[index]["type"] != j and temp[index]["type"] not in ["NULL"]:
                             temp[index] = interpreter([{"type": "cast", "cast_type": j, "value": temp[index]}], file, False, False, functions, variables, None, library_functions, include_folders, create_json)
 
-                    temp_vars = variables.copy()
+                    temp_vars = svariables.copy()
 
                     for index, j in enumerate(functions[i["name"]]["args"].keys()):
                         if functions[i["name"]]["args"][j] == temp[index]["type"]:
                             temp_vars[j] = temp[index]
 
-                    returned = interpreter(functions[i["name"]]["ast"], file, False, False, functions.copy(), temp_vars, functions[i["name"]]["type"], library_functions, include_folders, create_json)
+                    if i["name"] not in sfunctions:
+                        sfunctions[i["name"]] = functions[i["name"]]
+
+                    returned = interpreter(functions[i["name"]]["ast"], file, False, False, sfunctions.copy(), temp_vars, functions[i["name"]]["type"], library_functions, include_folders, create_json, variables.copy(), functions.copy())
+
+                    if returned in ["BREAK", "CONTINUE"]:
+                        error("'break' or 'continue' keyword used in wrong place")
 
                     if returned["type"].replace("NULL", "VOID") != functions[i["name"]]["type"]:
                         warning("expected '" + functions[i["name"]]["type"].lower() + "' got '" + returned["type"].lower() + "'")
@@ -1976,18 +2077,20 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                 print(f"program exit with code {error_code}")
 
     else:
-        if return_type != None and return_type != "VOID":
+        if return_type != None and return_type != "VOID" and return_type != "PASS":
             error("non-void functions should return a value")
 
         elif return_type == None:
             return variables, functions, library_functions
 
-def main(argv):
+def main():
+    argv = sys.argv
+
     def get(index, message, file, type = "error", terminated = False):
         try: return argv[index + 1]
         except IndexError: tools.error(message, file, type, terminated)
 
-    version = "0.0.8"
+    version = "0.0.10a"
 
     file = get(0, "no input files", "rsharp", "fatal error", True)
 
@@ -2039,4 +2142,4 @@ def main(argv):
     return 0
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    sys.exit(main())

@@ -5,7 +5,12 @@ with open("README.md", "r", encoding = "UTF-8") as file:
  
 setup(
     name = "rsharp",
-    version = "0.0.8",
+    version = "0.0.10a",
+    entry_points={
+        "console_scripts": [
+            "rsharp.py = rsharp.main:main",
+        ],
+    },
     description = "An interpreted statically typed multi paradigm general purpose programming language designed for cross platform applications.",
     long_description = long_desc,
     long_description_content_type = "text/markdown",
