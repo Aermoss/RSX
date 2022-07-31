@@ -42,29 +42,31 @@ def is_compiled():
 def get_dir():
     if is_compiled():
         if os.path.split(sys.argv[0])[0] not in [".", ""]:
-            return os.path.split(sys.argv[0])[0] + "\\"
+            return os.path.split(sys.argv[0])[0] + "/"
 
         else:
-            return "C:\\RSharp\\"
+            if sys.platform == "win32":
+                return "C:\\RSharp\\"
+
+            else:
+                return os.path.split(__file__)[0]
 
     else:
         return os.path.split(__file__)[0]
 
 def load_module(name):
-    sys.path.append(f"{get_dir()}\\include\\{name}")
+    sys.path.append(f"{get_dir()}/include/{name}")
     return __import__(name)
 
 def auto_include(file, include_folders):
+    tokens = core.lexer(
+        read_file(file = file),
+        file = file
+    )
+
     ast = core.parser(
-        tokens = core.lexer(
-            read_file(
-                file = file
-            ),
-            file = file,
-            create_json = False
-        ),
-        file = file,
-        create_json = False
+        tokens,
+        file = file
     )
 
     variables, functions, library_functions, files = {}, {}, {}, []
@@ -77,15 +79,14 @@ def auto_include(file, include_folders):
                 include_folders = include_folders,
                 variables = variables,
                 functions = functions,
-                library_functions = library_functions,
-                create_json = False
+                library_functions = library_functions
             )
 
             files.append(i["value"])
 
-    return variables, functions, library_functions, files
+    return variables, functions, library_functions, files, tokens, ast
 
-def include_library(file, namespace, include_folders, variables, functions, library_functions, create_json):
+def include_library(file, namespace, include_folders, variables, functions, library_functions):
     name, ext = os.path.splitext(file)
 
     if ext == ".py":
@@ -132,7 +133,7 @@ def include_library(file, namespace, include_folders, variables, functions, libr
         if file_path == None:
             error("'" + file + "'" + " " + "was not found", file)
 
-        temp = core.interpreter(core.parser(core.lexer(read_file(file_path), file_path, create_json), file_path, create_json), file_path, False, False, {}, {}, None, {}, include_folders, create_json)
+        temp = core.interpreter(core.parser(core.lexer(read_file(file_path), file_path), file_path), file_path, False, False, {}, {}, None, {}, include_folders)
 
         if namespace:
             library = {"functions": {}, "variables": {}}
@@ -153,13 +154,27 @@ def include_library(file, namespace, include_folders, variables, functions, libr
         library_functions.update(temp[2])
 
 def set_text_attr(color):
-    console_handle = ctypes.windll.kernel32.GetStdHandle(-11)
-    ctypes.windll.kernel32. SetConsoleTextAttribute(console_handle, color)
+    if sys.platform == "win32":
+        console_handle = ctypes.windll.kernel32.GetStdHandle(-11)
+        ctypes.windll.kernel32. SetConsoleTextAttribute(console_handle, color)
+
+    else:
+        if color == 7:
+            print("\u001b[0m", end = "", flush = True)
+
+        elif color == 13:
+            print("\u001b[31;1m", end = "", flush = True)
+
+        elif color == 12:
+            print("\u001b[31m", end = "", flush = True)
+
+        else:
+            ...
 
 def error(message, file, type = "error", terminated = False):
     print(f"{file}:", end = " ", flush = True)
     set_text_attr(12)
-    print(f"{type}: ", end = "", flush = True)
+    print(f"{type}:", end = " ", flush = True)
     set_text_attr(7)
     print(message, end = "\n", flush = True)
     if terminated: print("program terminated.")
@@ -168,7 +183,7 @@ def error(message, file, type = "error", terminated = False):
 def warning(message, file, type = "warning"):
     print(f"{file}:", end = " ", flush = True)
     set_text_attr(13)
-    print(f"{type}: ", end = "", flush = True)
+    print(f"{type}:", end = " ", flush = True)
     set_text_attr(7)
     print(message, end = "\n", flush = True)
 
@@ -203,7 +218,7 @@ def create_variables(variables):
         create_variable(i, variables[i])
 
 def run_function(name, enviroment):
-    temp = core.interpreter(enviroment["functions"][name]["ast"], enviroment["file"], False, False, enviroment["functions"], enviroment["variables"], enviroment["functions"][name]["type"], enviroment["library_functions"], enviroment["create_json"])
+    temp = core.interpreter(enviroment["functions"][name]["ast"], enviroment["file"], False, False, enviroment["functions"], enviroment["variables"], enviroment["functions"][name]["type"], enviroment["library_functions"])
 
     if temp == None: return None
     if list(temp.keys())[0] == "INT": return int(list(temp.values())[0])

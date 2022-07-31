@@ -2,10 +2,10 @@ from setuptools import setup, find_packages
 
 with open("README.md", "r", encoding = "UTF-8") as file:
     long_desc = file.read()
- 
+
 setup(
     name = "rsharp",
-    version = "0.0.10a",
+    version = "0.0.11a",
     entry_points={
         "console_scripts": [
             "rsharp.py = rsharp.main:main",
@@ -21,5 +21,5 @@ setup(
     keywords = "",
     packages = find_packages(),
     include_package_data = True,
-    install_requires = ["raylib"]
+    install_requires = ["raylib", "numba", "pyinstaller", "pysdl2", "pysdl2-dll"]
 )

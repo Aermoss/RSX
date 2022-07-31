@@ -4,7 +4,7 @@ import rsharp as rsx
 
 import __main__
 
-def build(path, console, hidden_imports = ["raylib"]):
+def build(path, console, hidden_imports = ["raylib", "pysdl2", "pysdl2-dll"]):
     if console: console = "--console"
     else: console = "--noconsole"
     hidden_imports_str = ""
@@ -14,7 +14,7 @@ def build(path, console, hidden_imports = ["raylib"]):
     os.chdir(rsx.tools.get_dir())
     os.system(f"pyinstaller main.py {console} --noconfirm --onefile --clean --paths=include --icon=icon.ico {hidden_imports_str}")
 
-    with open("dist/main.exe", "rb") as file:
+    with open("dist/" + os.listdir("dist")[0], "rb") as file:
         data = file.read()
 
     shutil.rmtree("build", ignore_errors = True)
@@ -29,7 +29,7 @@ def build(path, console, hidden_imports = ["raylib"]):
     with open(path.replace("\\", "/"), "wb") as file:
         file.write(data)
 
-def build_program(path, include_folders, console, variables, functions, library_functions, pre_included = [], hidden_imports = ["raylib"], icon = "icon.ico"):
+def build_program(path, include_folders, console, variables, functions, library_functions, pre_included = [], hidden_imports = ["raylib", "pysdl2", "pysdl2-dll"], icon = "icon.ico"):
     with open(path.replace("\\", "/"), "r") as file:
         file_content = file.read()
 
@@ -40,7 +40,7 @@ def build_program(path, include_folders, console, variables, functions, library_
 
     for i in library_functions:
         if library_functions[i]["func"].__module__ not in modules:
-            if library_functions[i]["func"].__module__ not in ["rsharp.std"]:
+            if not library_functions[i]["func"].__module__.startswith("rsharp"):
                 modules.append(library_functions[i]["func"].__module__)
 
     code = "import rsharp as rsx\n"
@@ -56,7 +56,7 @@ def build_program(path, include_folders, console, variables, functions, library_
         new_library_functions += "    \"" + i + "\": {"
         new_library_functions += "\"type\": \"" + library_functions[i]["type"] + "\", "
         new_library_functions += "\"args\": " + str(library_functions[i]["args"]).replace("'", "\"") + ", "
-        new_library_functions += "\"func\": " + library_functions[i]["func"].__module__ + "." + library_functions[i]["func"].__module__ + "[\"functions\"]" + "[\"" + library_functions[i]["func"].__name__ + "\"][\"func\"]}"
+        new_library_functions += "\"func\": " + library_functions[i]["func"].__module__.replace("rsharp", "rsx") + "." + library_functions[i]["func"].__module__.replace("rsharp.", "") + "[\"functions\"]" + "[\"" + library_functions[i]["func"].__name__ + "\"][\"func\"]}"
 
         if index != len(library_functions) - 1:
             new_library_functions += ", "
@@ -74,7 +74,6 @@ def build_program(path, include_folders, console, variables, functions, library_
     code += f"variables = " + str(variables).replace("'", "\"") + "\n"
     code += f"functions = " + str(functions).replace("'", "\"") + "\n"
     code += f"library_functions = {new_library_functions}\n"
-    code += "create_json = False\n"
     code += f"path = \"{path}\"\n"
     code += f"include_folders = {str(include_folders)}\n"
     code += f"pre_included = {str(pre_included)}\n"
@@ -83,11 +82,9 @@ def build_program(path, include_folders, console, variables, functions, library_
     code += "    rsx.core.parser(\n"
     code += "        rsx.core.lexer(\n"
     code += "            data = code,\n"
-    code += "            file = path,\n"
-    code += "            create_json = create_json\n"
+    code += "            file = path\n"
     code += "        ),"
-    code += "        file = path,\n"
-    code += "        create_json = create_json\n"
+    code += "        file = path\n"
     code += "    ),\n"
     code += "    file = path,\n"
     code += "    isbase = True,\n"
@@ -97,7 +94,6 @@ def build_program(path, include_folders, console, variables, functions, library_
     code += "    return_type = None,\n"
     code += "    library_functions = library_functions,\n"
     code += "    include_folders = include_folders,\n"
-    code += "    create_json = create_json,\n"
     code += "    pre_included = pre_included\n"
     code += ")"
 
@@ -142,8 +138,10 @@ def build_program(path, include_folders, console, variables, functions, library_
 
     os.system(f"pyinstaller temp.py {console} --noconfirm --onefile --clean {paths_str} --icon=\"{icon}\" {hidden_imports_str}")
 
-    with open("dist/temp.exe", "rb") as file:
+    with open("dist/" + os.listdir("dist")[0], "rb") as file:
         data = file.read()
+
+    ext = os.path.splitext(os.listdir("dist")[0])[1]
 
     shutil.rmtree("build", ignore_errors = True)
     shutil.rmtree("dist", ignore_errors = True)
@@ -154,7 +152,7 @@ def build_program(path, include_folders, console, variables, functions, library_
         shutil.rmtree("__pycache__", ignore_errors = True)
 
     os.chdir(first_dir)
-    name = os.path.splitext(path.replace("\\", "/"))[0] + ".exe"
+    name = os.path.splitext(path.replace("\\", "/"))[0] + ext
 
     with open(name, "wb") as file:
         file.write(data)

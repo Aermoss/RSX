@@ -4,16 +4,12 @@ sys.dont_write_bytecode = True
 
 import rsharp as rsx
 
-include_folders = [
-    os.path.split(rsx.__file__)[0] + "\\include\\",
-    "C:\\RSharp\\include\\",
-    ".\\include\\",
-    ".\\"
-]
+include_folders = [f"{rsx.tools.get_dir()}/include/", "./"]
+if sys.platform == "win32": include_folders.append("C:\\RSharp\\include\\")
 
 file = input("file path > ")
 
-variables, functions, library_functions, files = rsx.tools.auto_include(
+variables, functions, library_functions, files, tokens, ast = rsx.tools.auto_include(
     file = file,
     include_folders = include_folders
 )
@@ -26,4 +22,5 @@ rsx.builder.build_program(
     functions = functions,
     library_functions = library_functions,
     pre_included = files,
+    hidden_imports = ["raylib"]
 )

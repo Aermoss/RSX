@@ -1,7 +1,5 @@
 import sys, os, inspect
 
-sys.dont_write_bytecode = True
-
 def begin():
     global f_locals
     f_locals = inspect.stack()[1][0].f_locals

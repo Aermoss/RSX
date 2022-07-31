@@ -12,7 +12,7 @@ def build(environment):
 
 @create_function("VOID", {"path": "STRING", "include_folders": "STRING", "console": "BOOL", "icon": "STRING"})
 def build_program(environment):
-    variables, functions, library_functions, files = auto_include(
+    variables, functions, library_functions, files, tokens, ast = auto_include(
         file = environment["args"]["path"].replace("\\", "/"),
         include_folders = environment["args"]["include_folders"].split(";")
     )

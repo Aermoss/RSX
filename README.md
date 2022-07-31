@@ -1,6 +1,11 @@
 # R#
 An interpreted statically typed multi paradigm general purpose programming language designed for cross platform applications.
-![rsharp logo](rsharp/icon.png)
+
+# R# Logo
+![R# Logo](rsharp/logo.png)
+
+# R# Icon
+![R# Icon](rsharp/icon_alternative.png)
 
 # Getting Started
 ## How to install
@@ -9,20 +14,19 @@ An interpreted statically typed multi paradigm general purpose programming langu
 start install.bat
 ```
 
-## How to interprete the program
+## How to run a program
 ```
-python main.py main.rsx --interprete
-```
-
-## How to compile the program
-```
-python main.py main.rsx --compile
+python main.py main.rsx run
 ```
 
-## How to transpile the program
-### Python
+## How to build a program
 ```
-python main.py main.rsx --transpile-python
+python main.py main.rsx build
+```
+
+## How to run/build a R# bytecode
+```
+python main.py main.rsxc run/build
 ```
 
 ## How to make a library using python
@@ -52,10 +56,9 @@ int main() {
 ### library.rsxh
 ```c++
 include "rsxio" : *;
-include "rsxstr" : *;
 
 void log(string message) {
-    std::rout(std::addstr(message, "\n"));
+    std::rout(message + std::endl()));
 }
 ```
 
@@ -70,21 +73,31 @@ int main() {
 
 ## How to add an include folder
 ```
-python main.py main.rsx --interprete -Imy-include-folder
+python main.py main.rsx run -Imy-include-folder
 ```
 
-## How to create the json files for ast and tokens
-```
-python main.py main.rsx --interprete -ljson
-```
+# Command line arguments
+- -I[dir]
+- -rmI[dir]
+- -timeit=[true/false]
+- -gettok=[true/false]
+- -getast=[true/false]
+- -bytecode=[true/false]
+- -noconsole=[true/false]
+- -console=[true/false]
+- run
+- build
+
 
 # Examples
 ## Hello, World!
 ```c++
 include "rsxio" : *;
 
+// using namespace std;
+
 int main() {
-    std::rout("Hello, World!\n");
+    std::rout("Hello, World!" + std::endl());
     return 0;
 }
 ```
@@ -92,7 +105,6 @@ int main() {
 ## Builder
 ```c++
 include "rsxbuild" : *;
-include "rsxstr" : *;
 include "rsxsys" : *;
 include "rsxio" : *;
 
@@ -100,8 +112,8 @@ int main() {
     std::rout("file name > ");
     std::build_program(
         std::rin(),
-        std::addstr(std::getdir(), "\\include\\"),
-        true, std::addstr(std::getdir(), "\\icon.ico")
+        std::getdir() + "\\include\\",
+        true, std::getdir() + "\\icon.ico"
     ); return 0;
 }
 ```
@@ -122,3 +134,5 @@ int main() {
 - rsxterm
 - rsxtime
 - rsxos
+- rsxsocket
+- rsxsdl2 [indev]

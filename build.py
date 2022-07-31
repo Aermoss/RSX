@@ -6,5 +6,6 @@ import rsharp as rsx
 
 rsx.builder.build(
     path = "rsharp.exe",
-    console = True
+    console = True,
+    hidden_imports = ["raylib", "pysdl2", "pysdl2-dll"]
 )

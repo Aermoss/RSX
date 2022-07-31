@@ -1,983 +1,368 @@
-import sys, os
+import sys, os, time
+import platform
+
+from numba import njit, jit
+from numba.core import types
+from numba.typed import Dict
+
+from functools import cache
 
 sys.setrecursionlimit(5000)
 sys.dont_write_bytecode = True
 
-import importlib
+import importlib, pickle
 import ctypes, ctypes.util
-import difflib, json
-import string as strlib
+import difflib, hashlib
 
-import rsharp.transpiler as transpiler
 import rsharp.tools as tools
 import rsharp.std as std
 import rsharp.builder as builder
 
-def lexer(data, file, create_json):
-    def set_text_attr(color):
-        console_handle = ctypes.windll.kernel32.GetStdHandle(-11)
-        ctypes.windll.kernel32. SetConsoleTextAttribute(console_handle, color)
+keywords = {
+    "auto": "AUTO",
+    "void": "VOID",
+    "bool": "BOOL",
+    "int": "INT",
+    "float": "FLOAT",
+    "string": "STRING",
+    "return": "RETURN",
+    "false": "FALSE",
+    "true": "TRUE",
+    "null": "NULL",
+    "if": "IF",
+    "else": "ELSE",
+    "while": "WHILE",
+    "for": "FOR",
+    "switch": "SWITCH",
+    "case": "CASE",
+    "default": "DEFAULT",
+    # "class": "CLASS",
+    # "public": "PUBLIC",
+    # "private": "PRIVATE",
+    # "protected": "PROTECTED",
+    # "try": "TRY",
+    # "throw": "THROW",
+    # "catch": "CATCH",
+    # "const": "CONST",
+    "using": "USING",
+    # "struct": "STRUCT",
+    # "new": "NEW",
+    "delete": "DELETE",
+    "do": "DO",
+    "namespace": "NAMESPACE",
+    "break": "BREAK",
+    "continue": "CONTINUE",
+    "include": "INCLUDE"
+}
+
+constants = {
+    "true": "BOOL",
+    "false": "BOOL"
+}
+
+operators = {
+    ";": "SEMICOLON",
+    ":": "COLON",
+    "(": "LPAREN",
+    ")": "RPAREN",
+    "{": "LCURLYBRACKET",
+    "}": "RCURLYBRACKET",
+    ",": "COMMA",
+    "=": "EQUALS",
+    "-": "MINUS",
+    "+": "PLUS",
+    "*": "ASTERISK",
+    "/": "SLASH",
+    "\\": "BACKSLASH",
+    ">": "GREATER",
+    "<": "LESS",
+    "!": "NOT",
+    "|": "VERTICALBAR",
+    "&": "AMPERSAND",
+    "%": "MODULUS"
+}
+
+lines = {}
+
+def lexer(data, file):
+    pos = 0
+    char = data[pos]
+    tokens = []
+    row, col = 1, 1
+
+    lines[file] = data.split("\n")
 
     def error(message, file = file, type = "error", terminated = False):
-        print(f"{file}:", end = " ", flush = True)
-        set_text_attr(12)
-        print(f"{type}: ", end = "", flush = True)
-        set_text_attr(7)
+        print(f"{file}:{row}:{col}:", end = " ", flush = True)
+        tools.set_text_attr(12)
+        print(f"{type}:", end = " ", flush = True)
+        tools.set_text_attr(7)
         print(message, end = "\n", flush = True)
         if terminated: print("program terminated.")
         sys.exit(-1)
 
     def warning(message, file = file, type = "warning"):
-        print(f"{file}:", end = " ", flush = True)
-        set_text_attr(13)
-        print(f"{type}: ", end = "", flush = True)
-        set_text_attr(7)
+        print(f"{file}:{row}:{col}:", end = " ", flush = True)
+        tools.set_text_attr(13)
+        print(f"{type}:", end = " ", flush = True)
+        tools.set_text_attr(7)
         print(message, end = "\n", flush = True)
 
-    def check_str(value):
-        temp_value = []
-        should_done = False
+    def get(index, data = data):
+        try: return data[index]
+        except: return ""
 
-        for index, i in enumerate(value):
-            if i in strlib.ascii_letters + strlib.digits + "_" + "." + ":":
-                if not should_done:
-                    if index == 0:
-                        if i in strlib.digits:
-                            error("invalid character")
+    last_char = ""
+    last_pos = 0
+    last_col = 0
 
-                    temp_value.append(i)
+    while len(data) > pos:
+        col = last_col
 
-                else:
-                    error("invalid character")
+        for i in data[last_pos:pos]:
+            if i in "\r\n":
+                row += 1
+                col = 0
 
-            elif i == " ":
-                should_done = True
+            col += 1
 
-            else:
-                error("invalid character")
+        last_pos = pos
+        last_col = col
 
-        return "".join(temp_value)
+        while char.isspace():
+            pos += 1
+            col += 1
+            char = get(pos)
 
-    temp = []
-    string = ""
-    token = ""
-    state = None
-    row = 0
-    col = 0
+        if char.isalpha() or char in ["_"]:
+            id_str = ""
 
-    lines = data.split("\n")
+            while char.isalnum() or char in [".", ":", "_"]:
+                if char == ":" and id_str == "default": break
+                id_str += char
+                pos += 1
+                char = get(pos)
 
-    keywords = {
-        "auto": "AUTO",
-        "void": "VOID",
-        "bool": "BOOL",
-        "int": "INT",
-        "float": "FLOAT",
-        "string": "STRING",
-        "return": "RETURN",
-        "false": "FALSE",
-        "true": "TRUE",
-        "null": "NULL",
-        "if": "IF",
-        "else": "ELSE",
-        "while": "WHILE",
-        "for": "FOR",
-        # "switch": "SWITCH",
-        # "case": "CASE",
-        # "class": "CLASS",
-        # "public": "PUBLIC",
-        # "private": "PRIVATE",
-        # "protected": "PROTECTED",
-        # "try": "TRY",
-        # "throw": "THROW",
-        # "catch": "CATCH",
-        # "const": "CONST",
-        "using": "USING",
-        # "struct": "STRUCT",
-        # "new": "NEW",
-        "delete": "DELETE",
-        "do": "DO",
-        "namespace": "NAMESPACE",
-        "break": "BREAK",
-        "continue": "CONTINUE",
-        "include": "INCLUDE"
-    }
+            if id_str in keywords:
+                if id_str in constants:
+                    tokens.append({"value": constants[id_str], "row": row, "col": col})
 
-    tokens = {
-        ";": "SEMICOLON",
-        ":": "COLON",
-        "(": "LPAREN",
-        ")": "RPAREN",
-        "{": "LCURLYBRACKET",
-        "}": "RCURLYBRACKET",
-        ",": "COMMA",
-        "=": "EQUALS",
-        "-": "MINUS",
-        "+": "PLUS",
-        "*": "MULTIPLY",
-        "/": "DIVIDE",
-        ">": "GREATER",
-        "<": "LESS",
-        "!": "NOT",
-        "|": "VERTICALBAR",
-        "&": "AMPERSAND",
-        "\"": "QUOTATIONMARK"
-    }
-
-    passed_token = [" ", "\n", "\t", "\""]
-
-    row += 1
-
-    for char in data:
-        if state == "comment":
-            if char == "\n":
-                state = None
-
-        elif state == "multicomment":
-            if char in ["*", "/"]:
-                string += tokens[char]
-
-            if char in ["\n", " "]:
-                string = ""
-
-            if "MULTIPLYDIVIDE" in string:
-                state = None
-                string = ""
-
-        elif char in ["-", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "."]:
-            if char in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "."] and token != "":
-                token += char
-
-            elif state != "string" and state != "name":
-                state = "number"
+                tokens.append({"value": keywords[id_str], "row": row, "col": col})
 
             else:
-                string += token
-                string += char
-                token = ""
-            
-            if state == "number":
-                string += char
+                tokens.append({"value": "IDENTIFIER", "row": row, "col": col})
+                tokens.append({"value": id_str, "row": row, "col": col})
 
-        elif char in ["!", "<", ">", "=", "-", "+", "*", "/", "|", "&"]:
-            if state == "string":
-                if token != "":
-                    string += token
-                    token = ""
+        elif char.isdigit() or char == ".":
+            num_str = ""
+            last_char = get(pos - 1)
 
-                string += char
+            if char == ".":
+                num_str += "0"
+
+            while char.isdigit() or char in [".", "f"]:
+                num_str += char
+                pos += 1
+                char = get(pos)
+
+            if num_str.count(".") == 1:
+                tokens.append({"value": "FLOAT", "row": row, "col": col})
+
+                if num_str.count("f") not in [0, 1]:
+                    error("more than one 'f' found in a float")
+
+                num_str = num_str.replace("f", "")
+
+            elif num_str.count(".") == 0:
+                tokens.append({"value": "INT", "row": row, "col": col})
+
+                if num_str.count("f") != 0:
+                    error("used 'f' in an integer value")
 
             else:
-                if char in ["=", "<", ">", "=", "|", "&", "!"] and token != "":
-                    if string != "":
-                        token = string + token
-                        string = ""
+                error("more than one '.' found in a value")
 
-                    token = check_str(token)
+            if tokens[len(tokens) - 2]["value"] == "MINUS" and last_char != " ":
+                tokens.pop(len(tokens) - 2)
+                num_str = "-" + num_str
 
-                    temp.append("NAME")
-                    temp.append(token)
-                    token = ""
+            tokens.append({"value": num_str, "row": row, "col": col})
 
-                state = "token"
-                string += tokens[char]
+        elif char in ["\"", "'"]:
+            op = char
+            pos += 1
+            char = get(pos)
+            string = ""
 
-                if string == "DIVIDEDIVIDE":
-                    state = "comment"
-                    string = ""
-                    token = ""
+            while char and char != op:
+                if char in "\r\n":
+                    error("unterminated string literal")
 
-                if string == "DIVIDEMULTIPLY":
-                    state = "multicomment"
-                    string = ""
-                    token = ""
+                if char == "\\" and get(pos + 1) == "\"":
+                    string += "\""
+                    pos += 2
+                    char = get(pos)
 
-                if string == "NOT":
-                    temp.append("NOT")
-                    string = ""
-                    state = None
+                elif char == "\\" and get(pos + 1) == "\\":
+                    string += "\\"
+                    pos += 2
+                    char = get(pos)
 
-                if string == "VERTICALBARVERTICALBAR":
-                    temp.append("OR")
-                    string = ""
-                    state = None
+                elif char == "\\" and get(pos + 1) == "r":
+                    string += "\r"
+                    pos += 2
+                    char = get(pos)
 
-                if string == "AMPERSANDAMPERSAND":
-                    temp.append("AND")
-                    string = ""
-                    state = None
+                elif char == "\\" and get(pos + 1) == "n":
+                    string += "\n"
+                    pos += 2
+                    char = get(pos)
 
-        elif char in tokens:
-            if char in ["\"", "(", ")", ";", ":", "=", "{"]:
-                if (token != "" or string != "") and char in ["(", ")", ";", ":", "=", "{", "}"]:
-                    if state == "string":
-                        if token != "":
-                            string += token
-                            token = ""
-
-                        string += char
-
-                    if string == "PLUSPLUS":
-                        temp.append("INCREMENT")
-                        temp.append(token)
-                        string = ""
-                        token = ""
-                        state = None
-
-                    elif string == "--":
-                        temp.append("DECREMENT")
-                        temp.append(token)
-                        string = ""
-                        token = ""
-                        state = None
-
-                    if state == "name" and char == ":":
-                        string += char
-
-                    elif token != "" and char == ":":
-                        token += char
-
-                    if char == ";":
-                        if state == "token":
-                            if string != "":
-                                temp.append(string)
-                                string = ""
-                                state = None
-
-                            elif token != "":
-                                temp.append(token)
-                                token = ""
-                                state = None
-
-                    if string != "":
-                        if state == "number":
-                            if "." in string:
-                                if string[0] == ".":
-                                    string = "0" + string
-
-                                if string[0] == "-" and string[1] == ".":
-                                    string = "-" + "0" + string[1:]
-
-                                temp.append("FLOAT")
-                                temp.append(string)
-
-                            else:
-                                temp.append("INT")
-                                temp.append(string)
-
-                            state = None
-                            string = ""
-                                
-                        elif state == "name":
-                            if char != ":":
-                                string = check_str(string)
-
-                                temp.append("NAME")
-                                temp.append(string)
-                                
-                                state = None
-                                string = ""
-
-                    if token != "":
-                        if char == "(":
-                            if state != "string":
-                                temp.append("CALL")
-                                temp.append(token)
-
-                                token = ""
-                                state = None
-
-                        else:
-                            if token != "":
-                                if char != ":":
-                                    token = check_str(token)
-
-                                    temp.append("NAME")
-                                    temp.append(token)
-                                    
-                                    token = ""
-                                    state = None
-
-                elif char in ["\"", "("]:
-                    if state == "string" or (char == "(" and state != None):
-                        if token != "":
-                            string += token
-                            token = ""
-
-                        if string != "":
-                            temp.append(state.upper())
-                            temp.append(string)
-
-                        string = ""
-                        state = None
-
-                    elif char == "(":
-                        ...
-
-                    else:
-                        state = "string"
-
-                        if string != "":
-                            temp.append(string)
-                            string = ""
+                elif char == "\\" and get(pos + 1) == "t":
+                    string += "\t"
+                    pos += 2
+                    char = get(pos)
 
                 else:
-                    if state == "string":
-                        string += char
+                    string += char
+                    pos += 1
+                    char = get(pos)
 
-            if char not in passed_token:
-                if char in [",", ")", "}"]:
-                    if state == "number":
-                        if "." in string:
-                            if string[0] == ".":
-                                string = "0" + string
+            tokens.append({"value": "STRING", "row": row, "col": col})
+            tokens.append({"value": string.replace("mavish", "♥ mavish ♥"), "row": row, "col": col})
+            pos += 1
+            char = get(pos)
 
-                            if string[0] == "-" and string[1] == ".":
-                                string = "-" + "0" + string[1:]
+        elif char:
+            if char == "/":
+                if get(pos + 1) == "/":
+                    while char and char not in "\r\n":
+                        pos += 1
+                        char = get(pos)
 
-                            temp.append("FLOAT")
-                            temp.append(string)
+                    pos += 1
+                    char = get(pos)
 
-                        else:
-                            temp.append("INT")
-                            temp.append(string)
+                elif get(pos + 1) == "*":
+                    while char:
+                        pos += 1
+                        char = get(pos)
 
-                        string = ""
-                        state = None
-                        temp.append(tokens[char])
-
-                    elif state == "string":
-                        if char != ")": string += char
-
-                    else:
-                        if token != "":
-                            temp.append("NAME")
-                            temp.append(token)
-                            token = ""
-
-                        if string != "":
-                            temp.append("NAME")
-                            temp.append(string)
-                            string = ""
-
-                        state = None
-                        temp.append(tokens[char])
-
-                else:
-                    if state != "string" and state != "name":
-                        if token != "" and char == ":":
-                            continue
-
-                        temp.append(tokens[char])
-
-        else:
-            token += char
-
-            if token in passed_token:
-                if state != "string":
-                    token = ""
-
-                    if string != "":
-                        if state == "name":
-                            temp.append("NAME")
-                            temp.append(string)
-
-                        if state == "token":
-                            if string[0] == "-":
-                                string = "MINUS" + string[1:]
-
-                            temp.append(string)
-
-                        elif state == "number":
-                            if string == "-":
-                                temp.append("MINUS")
-
-                            else:
-                                if "." in string:
-                                    if string[0] == ".":
-                                        string = "0" + string
-
-                                    if string[0] == "-" and string[1] == ".":
-                                        string = "-" + "0" + string[1:]
-
-                                    temp.append("FLOAT")
-                                    temp.append(string)
-
-                                else:
-                                    temp.append("INT")
-                                    temp.append(string)
-
-                        string = ""
-                        state = None
-
-            elif state == "name" or state == "string":
-                string += token
-                token = ""
-
-            elif char == "f" and state == "number":
-                string += token
-                token = ""
-
-            elif char in [" ", "\n", ",", "(", ")", "{", "}", "[", "]"]:
-                current = col
-                found = False
-
-                while len(lines[row - 1]) >= current and lines[row - 1][current] in ["=", "<", ">", "|", "&", ")", "}", "]", "!", ",", "+", "-", "*", "/", " "]:
-                    if lines[row - 1][current] in ["=", "<", ">", "|", "&", ")", "}", "]", "!", ",", "+", "-", "*", "/"]:
-                        found = True
-
-                    current += 1
-
-                if token != "" and not found:
-                    if state == None:
-                        print(f"{file}:{row}:{col}: ", end = "", flush = True)
-                        set_text_attr(12)
-                        print("error: ", end = "", flush = True)
-                        set_text_attr(7)
-                        print(f"unexpected token: '{token[:-1]}'", end = "\n", flush = True)
-
-                        print(lines[row - 1][:col - 1 - len(token[:-1])], end = "", flush = True)
-                        set_text_attr(12)
-                        print(lines[row - 1][col - 1 - len(token[:-1]):col - 1], end = "", flush = True)
-                        set_text_attr(7)
-                        print(lines[row - 1][col - 1:], end = "\n", flush = True)
-                        set_text_attr(12)
-                        print(" " * (col - 1 - len(token[:-1])) + "^" + (len(token[:-1]) - 1) * "~", end = "\n", flush = True)
-                        set_text_attr(7)
-
-                        similar = difflib.get_close_matches(token, keywords)
-
-                        if len(similar) > 0:
-                            print("did you mean", end = " ", flush = True)
-                            set_text_attr(10)
-                            print(similar[0], end = "", flush = True)
-                            set_text_attr(7)
-                            print("?")
-
-                        sys.exit(-1)
-
-            elif token in keywords:
-                if string != "":
-                    temp.append(string)
-                    string = ""
-
-                if keywords[token] in ["VOID", "INT", "FLOAT", "BOOL", "STRING", "CLASS", "AUTO", "NAMESPACE"]:
-                    state = "name"
-
-                elif keywords[token] in ["TRUE", "FALSE"]:
-                    temp.append("BOOL")
-
-                elif keywords[token] in ["NULL"]:
-                    temp.append("NULL")
-
-                temp.append(keywords[token])
-                token = ""
-
-        if char == "\n" and state != "string":
-            row += 1
-            col = 0
-
-        col += 1
-
-    if create_json:
-        name = os.path.splitext(os.path.split(file)[1])[0]
-
-        if name == "init":
-            dirs = os.path.split(file)[0].split("/")
-            name = dirs[len(dirs) - 1]
-
-        with open(f"{name}_token.json", "w") as file:
-            file.write(json.dumps({"tokens": temp}, indent = 4))
-
-    return temp
-
-def parse_condition(condition_tokens, file, variables, functions, library_functions, include_folders, create_json):
-    pos = 0
-
-    last_token = {"token": None, "value": None}
-
-    def set_text_attr(color):
-        console_handle = ctypes.windll.kernel32.GetStdHandle(-11)
-        ctypes.windll.kernel32. SetConsoleTextAttribute(console_handle, color)
-
-    def error(message = "failed to parse the condition", file = file, type = "error", terminated = False, suggest = False):
-        print(f"{file}:", end = " ", flush = True)
-        set_text_attr(12)
-        print(f"{type}: ", end = "", flush = True)
-        set_text_attr(7)
-        print(message + ", current token: " + get(pos), end = "\n", flush = True)
-        if terminated: print("program terminated.")
-        sys.exit(-1)
-
-    def warning(message, file = file, type = "warning"):
-        print(f"{file}:", end = " ", flush = True)
-        set_text_attr(13)
-        print(f"{type}: ", end = "", flush = True)
-        set_text_attr(7)
-        print(message, end = "\n", flush = True)
-
-    def get(index):
-        try: return condition_tokens[index]
-        except: None
-
-    def get_call_args(current_pos):
-        temp_tokens = []
-        args = []
-        ignore = 0
-
-        while True:
-            if get(current_pos) == "LPAREN":
-                if ignore != 0:
-                    temp_tokens.append("LPAREN")
-
-                ignore += 1
-                current_pos += 1
-
-            elif get(current_pos) == "RPAREN":
-                ignore -= 1
-
-                if ignore == 0:
-                    if len(temp_tokens) != 0:
-                        temp_tokens.append("SEMICOLON")
-                        args.append(parser(temp_tokens, file, create_json)[0])
-                        temp_tokens.clear()
-
-                    break
-
-                temp_tokens.append("RPAREN")
-                current_pos += 1
-
-            elif get(current_pos) == "COMMA":
-                if ignore == 1:
-                    if len(temp_tokens) != 0:
-                        temp_tokens.append("SEMICOLON")
-                        args.append(parser(temp_tokens, file, create_json)[0])
-                        temp_tokens.clear()
+                        if char == "*" and get(pos + 1) == "/":
+                            pos += 1
+                            break
                 
-                else:
-                    temp_tokens.append("COMMA")
-
-                current_pos += 1
-            
-            else:
-                temp_tokens.append(get(current_pos))
-                current_pos += 1
-
-        return args, current_pos + 1
-
-    new_tokens = []
-
-    while len(condition_tokens) > pos:
-        if last_token["token"] == None or get(pos) != last_token["token"]:
-            last_token = {"token": get(pos), "value": 0}
-
-        elif get(pos) == last_token["token"]: last_token["value"] += 1
-        if last_token["value"] >= 1000: error()
-
-        if get(pos) == "NAME":
-            new_tokens.append(variables[get(pos + 1)]["type"])
-            new_tokens.append(variables[get(pos + 1)]["value"])
-            pos += 2
-
-        elif get(pos) == "CALL":
-            if get(pos + 2) == "LPAREN":
-                name = get(pos + 1)
-                args, pos = get_call_args(pos + 2)
-                ast = [{"type": "call", "name": name, "args": args}]
-                value = interpreter(ast, file, False, False, functions, variables, None, library_functions, include_folders, create_json)
-                new_tokens.append(value["type"])
-                new_tokens.append(value["value"])
-
-        else:
-            new_tokens.append(get(pos))
-            pos += 1
-
-    condition_tokens = new_tokens.copy()
-    new_tokens.clear()
-    pos = 0
-
-    while len(condition_tokens) > pos:
-        if last_token["token"] == None or get(pos) != last_token["token"]:
-            last_token = {"token": get(pos), "value": 0}
-
-        elif get(pos) == last_token["token"]: last_token["value"] += 1
-        if last_token["value"] >= 1000: error()
-
-        if get(pos) == "LPAREN":
-            condition_pos = pos
-            condition_pass = 0
-            temp_condition_tokens = []
-
-            while True:
-                if get(condition_pos) == "LPAREN":
-                    condition_pass += 1
-
-                elif get(condition_pos) == "RPAREN":
-                    condition_pass -= 1
-
-                    if condition_pass == 0:
-                        break
-
-                    condition_pos += 1
+                    pos += 1
+                    char = get(pos)
 
                 else:
-                    temp_condition_tokens.append(get(condition_pos))
-                    condition_pos += 1
+                    tokens.append({"value": operators[char], "row": row, "col": col})
+                    pos += 1
+                    char = get(pos)
 
-            new_tokens.append("BOOL")
-            new_tokens.append(parse_condition(temp_condition_tokens, file, variables, functions))
-            pos = condition_pos + 1
+            elif char in operators:
+                if tokens[len(tokens) - 1]["value"] in ["GREATER", "LESS", "NOT", "EQUALS", "PLUS", "MINUS", "ASTERISK", "SLASH", "MODULUS"] and char == "=" and last_char != " ":
+                    tokens.append({"value": tokens[len(tokens) - 1]["value"] + operators[char], "row": row, "col": col})
+                    tokens.pop(len(tokens) - 2)
 
-        else:
-            new_tokens.append(get(pos))
-            pos += 1
+                elif char == last_char == "|":
+                    tokens.append({"value": "OR", "row": row, "col": col})
+                    tokens.pop(len(tokens) - 2)
 
-    condition_tokens = new_tokens.copy()
-    new_tokens.clear()
-    pos = 0
-
-    while len(condition_tokens) > pos:
-        if last_token["token"] == None or get(pos) != last_token["token"]:
-            last_token = {"token": get(pos), "value": 0}
-
-        elif get(pos) == last_token["token"]: last_token["value"] += 1
-        if last_token["value"] >= 1000: error()
-
-        if get(pos) == "NOT" and get(pos + 1) != "EQUALS":
-            if get(pos + 1) == "BOOL":
-                new_tokens.append("BOOL")
-
-                if get(pos + 2) == "TRUE":
-                    new_tokens.append("FALSE")
-
-                elif get(pos + 2) == "FALSE":
-                    new_tokens.append("TRUE")
+                elif char == last_char == "&":
+                    tokens.append({"value": "AND", "row": row, "col": col})
+                    tokens.pop(len(tokens) - 2)
 
                 else:
-                    error("unexpected value")
+                    tokens.append({"value": operators[char], "row": row, "col": col})
 
-            pos += 3
-
-        else:
-            new_tokens.append(get(pos))
-            pos += 1
-
-    condition_tokens = new_tokens.copy()
-    new_tokens.clear()
-    pos = 0
-
-    while len(condition_tokens) > pos:
-        if last_token["token"] == None or get(pos) != last_token["token"]:
-            last_token = {"token": get(pos), "value": 0}
-
-        elif get(pos) == last_token["token"]: last_token["value"] += 1
-        if last_token["value"] >= 1000: error()
-
-        if get(pos) == "EQUALSEQUALS":
-            left_type = get(pos - 2)
-            left_value = get(pos - 1)
-            right_type = get(pos + 1)
-            right_value = get(pos + 2)
-
-            new_tokens.append("BOOL")
-
-            if left_type in ["INT", "FLOAT"] and right_type in ["INT", "FLOAT"]:
-                if (left_type == "INT" and right_type == "FLOAT") or (left_type == "FLOAT" and right_type == "INT"):
-                    if right_type == "FLOAT":
-                        right_value = float(right_value.replace("f", ""))
-                        left_value = float(left_value)
-
-                    elif left_type == "FLOAT":
-                        right_value = float(right_value)
-                        left_value = float(left_value.replace("f", ""))
-
-                elif (left_type == "INT" and right_type == "INT") or (left_type == "FLOAT" and right_type == "FLOAT"):
-                    if left_type == "INT" and right_type == "INT":
-                        left_value = int(left_value)
-                        right_value = int(right_value)
-
-                    elif left_type == "FLOAT" and right_type == "FLOAT":
-                        left_value = float(left_value.replace("f", ""))
-                        right_value = float(right_value.replace("f", ""))
-
-                else:
-                    error("unexpected error")
-                    
-                if left_value == right_value:
-                    new_tokens.append("TRUE")
-
-                else:
-                    new_tokens.append("FALSE")
-
-            elif left_type != right_type:
-                new_tokens.append("FALSE")
-
-            elif left_type == "BOOL" and right_type == "BOOL":
-                if left_value != right_value:
-                    new_tokens.append("FALSE")
-
-                else:
-                    new_tokens.append("TRUE")
-
-            elif left_type == "STRING" and right_type == "STRING":
-                if left_value != right_value:
-                    new_tokens.append("FALSE")
-
-                else:
-                    new_tokens.append("TRUE")
+                pos += 1
+                char = get(pos)
 
             else:
-                error("unexpected error")
+                error(f"unknown operator '{char}'")
 
-            pos += 3
+            last_char = char
+    
+    return tokens
 
-        elif get(pos) == "NOT" and get(pos + 1) == "EQUALS":
-            left_type = get(pos - 2)
-            left_value = get(pos - 1)
-            right_type = get(pos + 2)
-            right_value = get(pos + 3)
-
-            new_tokens.append("BOOL")
-
-            if left_type in ["INT", "FLOAT"] and right_type in ["INT", "FLOAT"]:
-                if (left_type == "INT" and right_type == "FLOAT") or (left_type == "FLOAT" and right_type == "INT"):
-                    if right_type == "FLOAT":
-                        right_value = float(right_value.replace("f", ""))
-                        left_value = float(left_value)
-
-                    elif left_type == "FLOAT":
-                        right_value = float(right_value)
-                        left_value = float(left_value.replace("f", ""))
-
-                elif (left_type == "INT" and right_type == "INT") or (left_type == "FLOAT" and right_type == "FLOAT"):
-                    if left_type == "INT" and right_type == "INT":
-                        left_value = int(left_value)
-                        right_value = int(right_value)
-
-                    elif left_type == "FLOAT" and right_type == "FLOAT":
-                        left_value = float(left_value.replace("f", ""))
-                        right_value = float(right_value.replace("f", ""))
-
-                else:
-                    error("unexpected error")
-
-                if left_value != right_value:
-                    new_tokens.append("TRUE")
-
-                else:
-                    new_tokens.append("FALSE")
-
-            elif left_type != right_type:
-                new_tokens.append("TRUE")
-
-            elif left_type == "BOOL" and right_type == "BOOL":
-                if left_value != right_value:
-                    new_tokens.append("TRUE")
-
-                else:
-                    new_tokens.append("FALSE")
-
-            elif left_type == "STRING" and right_type == "STRING":
-                if left_value != right_value:
-                    new_tokens.append("TRUE")
-
-                else:
-                    new_tokens.append("FALSE")
-
-            else:
-                error("unexpected error")
-
-            pos += 4
-
-        elif get(pos) in ["LESS", "LESSEQUALS", "GREATER", "GREATEREQUALS"]:
-            left_type = get(pos - 2)
-            left_value = get(pos - 1)
-            right_type = get(pos + 1)
-            right_value = get(pos + 2)
-
-            new_tokens.append("BOOL")
-
-            if left_type in ["INT", "FLOAT"] and right_type in ["INT", "FLOAT"]:
-                if (left_type == "INT" and right_type == "FLOAT") or (left_type == "FLOAT" and right_type == "INT"):
-                    if right_type == "FLOAT":
-                        right_value = float(right_value.replace("f", ""))
-                        left_value = float(left_value)
-
-                    elif left_type == "FLOAT":
-                        right_value = float(right_value)
-                        left_value = float(left_value.replace("f", ""))
-
-                elif (left_type == "INT" and right_type == "INT") or (left_type == "FLOAT" and right_type == "FLOAT"):
-                    if left_type == "INT" and right_type == "INT":
-                        left_value = int(left_value)
-                        right_value = int(right_value)
-
-                    elif left_type == "FLOAT" and right_type == "FLOAT":
-                        left_value = float(left_value.replace("f", ""))
-                        right_value = float(right_value.replace("f", ""))
-
-                else:
-                    error("unexpected error")
-
-                if get(pos) == "LESS": condition = left_value < right_value
-                elif get(pos) == "LESSEQUALS": condition = left_value <= right_value
-                elif get(pos) == "GREATER": condition = left_value > right_value
-                elif get(pos) == "GREATEREQUALS": condition = left_value >= right_value
-                else: error("unexpected error")
-
-                if condition:
-                    new_tokens.append("TRUE")
-
-                else:
-                    new_tokens.append("FALSE")
-
-            else:
-                error("unexpected type")
-
-            pos += 3
-
-        elif get(pos) in ["INT", "FLOAT", "STRING", "BOOL"]:
-            if not ((get(pos + 2) in ["EQUALSEQUALS", "LESS", "LESSEQUALS", "GREATER", "GREATEREQUALS"]) or (get(pos + 2) == "NOT" and get(pos + 3) == "EQUALS")):
-                new_tokens.append(get(pos))
-                new_tokens.append(get(pos + 1))
-
-            pos += 2
-
-        elif get(pos) in ["AND", "OR"]:
-            new_tokens.append(get(pos))
-            pos += 1
-
-        else:
-            error("unexpected token")
-
-    condition_tokens = new_tokens.copy()
-    new_tokens.clear()
-    pos = 0
-
-    while len(condition_tokens) > pos:
-        if last_token["token"] == None or get(pos) != last_token["token"]:
-            last_token = {"token": get(pos), "value": 0}
-
-        elif get(pos) == last_token["token"]: last_token["value"] += 1
-        if last_token["value"] >= 1000: error()
-
-        if get(pos) == "AND":
-            left_type = get(pos - 2)
-            left_value = get(pos - 1)
-            right_type = get(pos + 1)
-            right_value = get(pos + 2)
-
-            new_tokens.append("BOOL")
-
-            if left_type == "BOOL" and right_type == "BOOL":
-                if left_value == "TRUE" and right_value == "TRUE":
-                    new_tokens.append("TRUE")
-
-                else:
-                    new_tokens.append("FALSE")
-
-            else:
-                error("unexpected type")
-
-            pos += 3
-
-            for index, i in enumerate(condition_tokens):
-                if index >= pos:
-                    new_tokens.append(get(index))
-
-            condition_tokens = new_tokens.copy()
-            new_tokens.clear()
-            pos = 0
-
-        elif get(pos) == "OR":
-            left_type = get(pos - 2)
-            left_value = get(pos - 1)
-            right_type = get(pos + 1)
-            right_value = get(pos + 2)
-
-            new_tokens.append("BOOL")
-
-            if left_type == "BOOL" and right_type == "BOOL":
-                if left_value == "TRUE" or right_value == "TRUE":
-                    new_tokens.append("TRUE")
-
-                else:
-                    new_tokens.append("FALSE")
-
-            else:
-                error("unexpected type")
-
-            pos += 3
-
-            for index, i in enumerate(condition_tokens):
-                if index >= pos:
-                    new_tokens.append(get(index))
-
-            condition_tokens = new_tokens.copy()
-            new_tokens.clear()
-            pos = 0
-
-        elif get(pos) == "BOOL":
-            if get(pos + 2) not in ["AND", "OR"]:
-                new_tokens.append(get(pos))
-                new_tokens.append(get(pos + 1))
-
-            pos += 2
-
-        else:
-            error("unexpected token")
-
-    if len(new_tokens) == 2:
-        if new_tokens[0] == "BOOL":
-            if new_tokens[1] == "TRUE":
-                return True
-
-            elif new_tokens[1] == "FALSE":
-                return False
-
-            else:
-                error("unexpected value")
-
-        else:
-            error("unexpected type")
-
-    else:
-        error("unexpected error")
-
-def parser(tokens, file, create_json):
+def parser(tokens, file):
     ast = []
     pos = 0
 
     last_token = {"token": None, "value": None}
 
-    def set_text_attr(color):
-        console_handle = ctypes.windll.kernel32.GetStdHandle(-11)
-        ctypes.windll.kernel32. SetConsoleTextAttribute(console_handle, color)
+    def error(message = None, file = file, type = "error", terminated = False):
+        row, col = None, None
 
-    def error(message = "failed to generate the ast", file = file, type = "error", terminated = False, suggest = False):
-        print(f"{file}:", end = " ", flush = True)
-        set_text_attr(12)
-        print(f"{type}: ", end = "", flush = True)
-        set_text_attr(7)
-        print(message + ", current token: " + get(pos), end = "\n", flush = True)
+        if isinstance(tokens[pos], str):
+            print(f"{file}:<{tokens[pos]}>:", end = " ", flush = True)
+
+        else:
+            row, col = tokens[pos]["row"], tokens[pos]["col"]
+            print(f"{file}:{row}:{col}:", end = " ", flush = True)
+
+        tools.set_text_attr(12)
+        print(f"{type}:", end = " ", flush = True)
+        tools.set_text_attr(7)
+        should_pass = False
+
+        if get(pos) == "IDENTIFIER" and message == None:
+            if get(pos + 1) not in keywords:
+                should_pass = True
+                close_matches = difflib.get_close_matches(get(pos + 1), keywords)
+
+                print(f"invalid identifier: '{get(pos + 1)}'", end = "\n", flush = True)
+                
+                if row != None and col != None:
+                    print(lines[file][row - 1][:col - 1], end = "", flush = True)
+                    tools.set_text_attr(12)
+                    print(lines[file][row - 1][col - 1:col - 1 + len(get(pos + 1))], end = "", flush = True)
+                    tools.set_text_attr(7)
+                    print(lines[file][row - 1][col - 1 + len(get(pos + 1)):], end = "\n", flush = True)
+                    tools.set_text_attr(12)
+                    print(" " * (col - 1) + "^" + (len(get(pos + 1)) - 1) * "~", end = "\n", flush = True)
+                    tools.set_text_attr(7)
+
+                if len(close_matches) > 0:
+                    print("did you mean", end = " ", flush = True)
+                    tools.set_text_attr(10)
+                    print(close_matches[len(close_matches) - 1], end = "", flush = True)
+                    tools.set_text_attr(7)
+                    print("?", end = "\n", flush = True)
+            
+        if not should_pass:
+            if message == None:
+                message = "failed to generate the ast"
+
+            print(message, end = "\n", flush = True)
+
         if terminated: print("program terminated.")
-
-        if suggest:
-            if last_token["token"] in ["CALL", "RETURN", "STRING", "AUTO", "INT", "FLOAT", "BOOL", "NAME"]:
-                print("did you forget to put a semicolon?")
-
         sys.exit(-1)
 
     def warning(message, file = file, type = "warning"):
-        print(f"{file}:", end = " ", flush = True)
-        set_text_attr(13)
-        print(f"{type}: ", end = "", flush = True)
-        set_text_attr(7)
+        row, col = tokens[pos]["row"], tokens[pos]["col"]
+        print(f"{file}:{row}:{col}:", end = " ", flush = True)
+        tools.set_text_attr(13)
+        print(f"{type}:", end = " ", flush = True)
+        tools.set_text_attr(7)
         print(message, end = "\n", flush = True)
 
-    def get(index):
-        try: return tokens[index]
-        except: error()
+    def get(index, pure = False):
+        try:
+            if pure:
+                return tokens[index]
+                
+            else:
+                value = tokens[index]
+
+                if isinstance(value, str):
+                    return value
+
+                else:
+                    return value["value"]
+                
+        except IndexError: error()
 
     def get_call_args(current_pos):
         temp_tokens = []
@@ -987,7 +372,7 @@ def parser(tokens, file, create_json):
         while True:
             if get(current_pos) == "LPAREN":
                 if ignore != 0:
-                    temp_tokens.append("LPAREN")
+                    temp_tokens.append(get(current_pos, True))
 
                 ignore += 1
                 current_pos += 1
@@ -997,29 +382,29 @@ def parser(tokens, file, create_json):
 
                 if ignore == 0:
                     if len(temp_tokens) != 0:
-                        temp_tokens.append("SEMICOLON")
-                        args.append(parser(temp_tokens, file, create_json)[0])
+                        temp_tokens.append({"value": "SEMICOLON", "row": 0, "col": 0})
+                        args.append(parser(temp_tokens, file)[0])
                         temp_tokens.clear()
 
                     break
 
-                temp_tokens.append("RPAREN")
+                temp_tokens.append(get(current_pos, True))
                 current_pos += 1
 
             elif get(current_pos) == "COMMA":
                 if ignore == 1:
                     if len(temp_tokens) != 0:
-                        temp_tokens.append("SEMICOLON")
-                        args.append(parser(temp_tokens, file, create_json)[0])
+                        temp_tokens.append({"value": "SEMICOLON", "row": 0, "col": 0})
+                        args.append(parser(temp_tokens, file)[0])
                         temp_tokens.clear()
                 
                 else:
-                    temp_tokens.append("COMMA")
+                    temp_tokens.append(get(current_pos, True))
 
                 current_pos += 1
             
             else:
-                temp_tokens.append(get(current_pos))
+                temp_tokens.append(get(current_pos, True))
                 current_pos += 1
 
         return args, current_pos + 1
@@ -1049,7 +434,7 @@ def parser(tokens, file, create_json):
                 arg_type = get(current_pos)
                 current_pos += 1
 
-            elif get(current_pos) == "NAME":
+            elif get(current_pos) == "IDENTIFIER":
                 arg_name = get(current_pos + 1)
                 current_pos += 2
 
@@ -1069,18 +454,18 @@ def parser(tokens, file, create_json):
         if get(current_pos) != "LCURLYBRACKET":
             while True:
                 if get(current_pos) == "SEMICOLON":
-                    temp_tokens.append(get(current_pos))
+                    temp_tokens.append(get(current_pos, True))
                     break
 
                 else:
-                    temp_tokens.append(get(current_pos))
+                    temp_tokens.append(get(current_pos, True))
                     current_pos += 1
 
         else:
             while True:
                 if get(current_pos) == "LCURLYBRACKET":
                     if ignore != 0:
-                        temp_tokens.append(get(current_pos))
+                        temp_tokens.append(get(current_pos, True))
 
                     ignore += 1
                     current_pos += 1
@@ -1091,14 +476,101 @@ def parser(tokens, file, create_json):
                     if ignore == 0:
                         break
 
-                    temp_tokens.append(get(current_pos))
+                    temp_tokens.append(get(current_pos, True))
                     current_pos += 1
 
                 else:
-                    temp_tokens.append(get(current_pos))
+                    temp_tokens.append(get(current_pos, True))
                     current_pos += 1
 
-        return parser(temp_tokens, file, create_json), current_pos + 1
+        return parser(temp_tokens, file), current_pos + 1
+
+    def collect_tokens(temp_pos, stop_tokens = ["SEMICOLON", "PLUS", "MINUS", "SLASH", "ASTERISK", "EQUALS" * 2, "NOT" + "EQUALS", "GREATER", "GREATER" + "EQUALS", "LESS", "LESS" + "EQUALS", "AND", "OR", "NOT"]):
+        temp_tokens = []
+        ignore = 0
+
+        while True:
+            if get(temp_pos) in stop_tokens:
+                if ignore == 0: break
+
+            elif get(temp_pos) == "LPAREN":
+                temp_tokens.append(get(temp_pos, True))
+                ignore += 1
+                temp_pos += 1
+
+            elif get(temp_pos) == "RPAREN":
+                temp_tokens.append(get(temp_pos, True))
+                ignore -= 1
+                temp_pos += 1
+
+            else:
+                temp_tokens.append(get(temp_pos, True))
+                temp_pos += 1
+
+        temp_tokens.append({"value": "SEMICOLON", "row": 0, "col": 0})
+        return temp_tokens, temp_pos
+
+    def factor(temp_pos, result = None):
+        token = get(temp_pos)
+
+        if result != None: return result, temp_pos
+
+        if token == "LPAREN":
+            if get(temp_pos + 1) in ["STRING", "BOOL", "INT", "FLOAT"] and get(temp_pos + 2) == "RPAREN":
+                type = get(temp_pos + 1)
+                temp_pos += 3
+                result, temp_pos = expr(temp_pos)
+                return {"type": "cast", "cast_type": type, "value": result}, temp_pos
+
+            else:
+                temp_pos += 1
+                result, temp_pos = expr(temp_pos)
+                if get(temp_pos) != "RPAREN": error(f"expected 'RPAREN' but found '{token}'")
+                temp_pos += 1
+                return result, temp_pos
+
+        if token in ["INT", "FLOAT", "STRING"]:
+            temp_pos += 2
+            return {"type": token, "value": get(temp_pos - 1)}, temp_pos
+
+        elif token in ["PLUS", "MINUS"]:
+            temp_pos += 1
+            return factor(temp_pos, result)
+
+        elif token == "IDENTIFIER":
+            name = get(temp_pos + 1)
+
+            if get(temp_pos + 2) == "LPAREN":
+                args, temp_pos = get_call_args(temp_pos + 2)
+                return {"type": "call", "name": name, "args": args}, temp_pos
+
+            else:
+                temp_pos += 2
+                return {"type": "IDENTIFIER", "value": name}, temp_pos
+
+        return result, temp_pos
+
+    def term(temp_pos, result = None):
+        result, temp_pos = factor(temp_pos, result)
+
+        while get(temp_pos) in ["ASTERISK", "SLASH", "MODULUS"]:
+            type = get(temp_pos)
+            temp_pos += 1
+            right, temp_pos = factor(temp_pos)
+            result = {"type": type.replace("ASTERISK", "mul").replace("SLASH", "div").replace("MODULUS", "mod"), "left": result, "right": right}
+
+        return result, temp_pos
+
+    def expr(temp_pos, result = None):
+        result, temp_pos = term(temp_pos, result)
+
+        while get(temp_pos) in ["PLUS", "MINUS"]:
+            type = get(temp_pos)
+            temp_pos += 1
+            right, temp_pos = term(temp_pos)
+            result = {"type": type.replace("PLUS", "add").replace("MINUS", "sub"), "left": result, "right": right}
+
+        return result, temp_pos
 
     while len(tokens) > pos:
         if last_token["token"] == None or get(pos) != last_token["token"]:
@@ -1108,7 +580,7 @@ def parser(tokens, file, create_json):
         if last_token["value"] >= 1000: error()
 
         if get(pos) == "NAMESPACE":
-            if get(pos + 1) == "NAME":
+            if get(pos + 1) == "IDENTIFIER":
                 if get(pos + 3) == "LCURLYBRACKET":
                     name = get(pos + 2)
                     temp_ast, pos = get_func_ast(pos + 3)
@@ -1120,21 +592,9 @@ def parser(tokens, file, create_json):
                     pos += 1
 
         elif get(pos) == "NOT":
-            temp_tokens = []
-            pos += 1
-
-            while True:
-                if get(pos) == "SEMICOLON":
-                    temp_tokens.append(get(pos))
-                    break
-
-                else:
-                    temp_tokens.append(get(pos))
-                    pos += 1
-
-            if get(pos) == "SEMICOLON":
-                ast.append({"type": "not", "value": parser(temp_tokens, file, create_json)[0]})
-                pos += 1
+            temp_tokens, pos = collect_tokens(pos + 1)
+            ast.append({"type": "not", "value": parser(temp_tokens, file)[0]})
+            if get(pos) == "SEMICOLON": pos += 1
 
         elif get(pos) == "FOR":
             if get(pos + 1) == "LPAREN":
@@ -1179,7 +639,8 @@ def parser(tokens, file, create_json):
                         temp_pos += 1
 
                 temp_ast, pos = get_func_ast(temp_pos + 1)
-                ast.append({"type": "for", "ast": temp_ast, "init": parser(temp_tokens[0], file, False), "condition": temp_tokens[1], "update": parser(temp_tokens[2], file, False)})
+                temp_tokens[1].append({"value": "SEMICOLON", "row": 0, "col": 0})
+                ast.append({"type": "for", "ast": temp_ast, "init": parser(temp_tokens[0], file), "condition": parser(temp_tokens[1], file)[0], "update": parser(temp_tokens[2], file)})
 
         elif get(pos) in ["IF", "ELSE", "WHILE"]:
             first_pos = pos
@@ -1234,17 +695,32 @@ def parser(tokens, file, create_json):
             else: name = get(first_pos).lower()
 
             if (get(first_pos) in ["IF", "WHILE"]) or (get(first_pos) == "ELSE" and get(first_pos + 1) == "IF"):
-                ast.append({"type": name, "ast": temp_ast, "condition": condition_tokens})
+                condition_tokens.append("SEMICOLON")
+                ast.append({"type": name, "ast": temp_ast, "condition": parser(condition_tokens, file)[0]})
 
             else:
                 ast.append({"type": name, "ast": temp_ast})
 
         elif get(pos) == "USING":
             if get(pos + 1) == "NAMESPACE":
-                if get(pos + 2) == "NAME":
+                if get(pos + 2) == "IDENTIFIER":
                     if get(pos + 4) == "SEMICOLON":
                         ast.append({"type": "using namespace", "name": get(pos + 3)})
                         pos += 5
+
+        elif get(pos) == "OR":
+            left = ast[len(ast) - 1]
+            ast.pop(len(ast) - 1)
+            temp_tokens, pos = collect_tokens(pos, ["OR", "AND", "SEMICOLON"])
+            ast.append({"type": "or", "left": left, "right": parser(temp_tokens, file)[0]})
+            if get(pos) == "SEMICOLON": pos += 1
+
+        elif get(pos) == "AND":
+            left = ast[len(ast) - 1]
+            ast.pop(len(ast) - 1)
+            temp_tokens, pos = collect_tokens(pos, ["OR", "AND", "SEMICOLON"])
+            ast.append({"type": "and", "left": left, "right": parser(temp_tokens, file)[0]})
+            if get(pos) == "SEMICOLON": pos += 1
 
         elif get(pos) == "DO":
             first_pos = pos
@@ -1258,7 +734,7 @@ def parser(tokens, file, create_json):
                 while True:
                     if get(condition_pos) == "LPAREN":
                         if condition_pass != 0:
-                            condition_tokens.append(get(condition_pos))
+                            condition_tokens.append(get(condition_pos, True))
 
                         condition_pass += 1
                         condition_pos += 1
@@ -1272,24 +748,198 @@ def parser(tokens, file, create_json):
 
                             break
 
-                        condition_tokens.append(get(condition_pos))
+                        condition_tokens.append(get(condition_pos, True))
                         condition_pos += 1
 
                     elif get(condition_pos) in ["LCURLYBRACKET"]:
                         error("expected ')'")
 
                     else:
-                        condition_tokens.append(get(condition_pos))
+                        condition_tokens.append(get(condition_pos, True))
                         condition_pos += 1
 
                 pos = condition_pos + 1
-                ast.append({"type": "do while", "ast": temp_ast, "condition": condition_tokens})
+                condition_tokens.append({"value": "SEMICOLON", "row": 0, "col": 0})
+                ast.append({"type": "do while", "ast": temp_ast, "condition": parser(condition_tokens, file)[0]})
 
                 if get(pos) == "SEMICOLON":
                     pos += 1
 
             else:
                 ast.append({"type": "do", "ast": temp_ast})
+
+        elif get(pos) == "SWITCH":
+            if get(pos + 1) == "LPAREN":
+                temp_tokens = []
+                ignore = 1
+                pos += 2
+
+                while True:
+                    if get(pos) == "RPAREN":
+                        ignore -= 1
+                        if ignore == 0: break
+                        temp_tokens.append(get(pos, True))
+                        pos += 1
+
+                    elif get(pos) == "LPAREN":
+                        temp_tokens.append(get(pos, True))
+                        ignore += 1
+                        pos += 1
+
+                    else:
+                        temp_tokens.append(get(pos, True))
+                        pos += 1
+
+                temp_tokens.append({"value": "SEMICOLON", "row": 0, "col": 0})
+                value = parser(temp_tokens, file)[0]
+                temp_tokens.clear()
+
+                if get(pos + 1) != "LCURLYBRACKET":
+                    error("expected '{'")
+
+                pos += 2
+                ignore = 1
+                current_case = None
+                cases = {}
+
+                while True:
+                    if get(pos) == "RCURLYBRACKET":
+                        ignore -= 1
+                        if ignore == 0: break
+                        if current_case == None: error("couldn't find any case")
+                        cases[current_case]["ast"].append(get(pos, True))
+                        pos += 1
+
+                    elif get(pos) == "LCURLYBRACKET":
+                        if current_case == None: error("couldn't find any case")
+                        cases[current_case]["ast"].append(get(pos, True))
+                        ignore += 1
+                        pos += 1
+
+                    elif get(pos) in ["CASE", "DEFAULT"]:
+                        if current_case != None: cases[current_case]["ast"] = parser(cases[current_case]["ast"], file)
+                        current_case = len(cases)
+                        if get(pos) == "DEFAULT": current_case = "default"
+                        cases[current_case] = {"ast": [], "value": []}
+                        pos += 1
+
+                        while current_case != "default":
+                            if get(pos) == "COLON":
+                                break
+
+                            else:
+                                cases[current_case]["value"].append(get(pos))
+                                pos += 1
+
+                        else:
+                            del cases[current_case]["value"]
+
+                            if get(pos) == "COLON":
+                                pos += 1
+
+                            else:
+                                error("expected ':'")
+
+                        if "value" in cases[current_case]:
+                            cases[current_case]["value"].append({"value": "SEMICOLON", "row": 0, "col": 0})
+                            cases[current_case]["value"] = parser(cases[current_case]["value"], file)[0]
+                            pos += 1
+
+                    else:
+                        if current_case == None: error("couldn't find any case")
+                        cases[current_case]["ast"].append(get(pos, True))
+                        pos += 1
+
+                if current_case != None: cases[current_case]["ast"] = parser(cases[current_case]["ast"], file)
+
+                if get(pos) == "RCURLYBRACKET":
+                    ast.append({"type": "switch", "value": value, "cases": cases})
+                    pos += 1
+
+        elif get(pos) == "LPAREN" and get(pos + 1) in ["STRING", "BOOL", "INT", "FLOAT"] and get(pos + 2) == "RPAREN":
+            temp_tokens = []
+            type = get(pos + 1)
+            pos += 3
+            ignore = 0
+
+            while True:
+                if get(pos) in ["SEMICOLON", "PLUS", "MINUS", "SLASH", "ASTERISK", "MODULUS", "EQUALS" * 2, "NOT" + "EQUALS", "GREATER", "GREATER" + "EQUALS", "LESS", "LESS" + "EQUALS", "AND", "OR", "NOT"]:
+                    if ignore == 0: break
+                    temp_tokens.append(get(pos, True))
+                    pos += 1
+
+                elif get(pos) == "LPAREN":
+                    temp_tokens.append(get(pos, True))
+                    pos += 1
+                    ignore += 1
+
+                elif get(pos) == "RPAREN":
+                    temp_tokens.append(get(pos, True))
+                    pos += 1
+                    ignore -= 1
+
+                else:
+                    temp_tokens.append(get(pos, True))
+                    pos += 1
+
+            temp_tokens.append({"value": "SEMICOLON", "row": 0, "col": 0})
+            ast.append({"type": "cast", "cast_type": type, "value": parser(temp_tokens, file)[0]})
+
+        elif get(pos) == "LPAREN":
+            temp_tokens = []
+            ignore = 1
+            pos += 1
+
+            while True:
+                if get(pos) == "RPAREN":
+                    ignore -= 1
+
+                    if ignore == 0:
+                        break
+
+                    temp_tokens.append(get(pos, True))
+                    pos += 1
+
+                elif get(pos) == "LPAREN":
+                    temp_tokens.append(get(pos, True))
+                    ignore += 1
+                    pos += 1
+
+                else:
+                    temp_tokens.append(get(pos, True))
+                    pos += 1
+
+            temp_tokens.append({"value": "SEMICOLON", "row": 0, "col": 0})
+            ast.append(parser(temp_tokens, file)[0])
+            pos += 1
+
+        elif get(pos) in ["PLUS", "MINUS", "SLASH", "ASTERISK", "MODULUS"]:
+            result, pos = expr(pos, ast[len(ast) - 1])
+            ast.append(result)
+            ast.pop(len(ast) - 2)
+
+            if get(pos) == "SEMICOLON":
+                pos += 1
+
+        elif get(pos) in ["EQUALS" * 2, "NOT" + "EQUALS", "GREATER", "GREATER" + "EQUALS", "LESS", "LESS" + "EQUALS"]:
+            temp_tokens = []
+            type = get(pos).lower()
+            pos += 1
+
+            while True:
+                if get(pos) in ["SEMICOLON", "EQUALS" * 2, "NOT" + "EQUALS", "GREATER", "GREATER" + "EQUALS", "LESS", "LESS" + "EQUALS", "OR", "AND", "NOT"]:
+                    break
+
+                else:
+                    temp_tokens.append(get(pos, True))
+                    pos += 1
+
+            temp_tokens.append({"value": "SEMICOLON", "row": 0, "col": 0})
+            ast.append({"type": type, "left": ast[len(ast) - 1], "right": parser(temp_tokens, file)[0]})
+            ast.pop(len(ast) - 2)
+
+            if get(pos) == "SEMICOLON":
+                pos += 1
 
         elif get(pos) == "RETURN":
             temp_tokens = []
@@ -1298,20 +948,20 @@ def parser(tokens, file, create_json):
 
             while True:
                 if get(pos) == "SEMICOLON":
-                    temp_tokens.append(get(pos))
+                    temp_tokens.append(get(pos, True))
                     break
 
                 else:
-                    temp_tokens.append(get(pos))
+                    temp_tokens.append(get(pos, True))
                     pos += 1
 
             if get(pos) == "SEMICOLON":
-                ast.append({"type": "return", "value": parser(temp_tokens, file, create_json)[0]})
+                ast.append({"type": "return", "value": parser(temp_tokens, file)[0]})
                 pos += 1
 
         elif get(pos) == "DELETE":
             if get(pos + 3) == "SEMICOLON":
-                if get(pos + 1) == "NAME":
+                if get(pos + 1) == "IDENTIFIER":
                     ast.append({"type": get(pos).lower(), "value": get(pos + 2)})
                     pos += 4
 
@@ -1323,7 +973,7 @@ def parser(tokens, file, create_json):
 
             elif get(pos + 3) == "COLON":
                 if get(pos + 5) == "SEMICOLON":
-                    if get(pos + 4) == "MULTIPLY":
+                    if get(pos + 4) == "ASTERISK":
                         if get(pos + 1) == "STRING":
                             ast.append({"type": "include", "all": True, "value": get(pos + 2)})
                             pos += 6
@@ -1333,33 +983,24 @@ def parser(tokens, file, create_json):
                 ast.append({"type": get(pos).lower()})
                 pos += 2
 
-        elif get(pos) in ["INCREMENT", "DECREMENT"]:
-            ast.append({"type": get(pos).lower(), "value": get(pos + 1)})
-            pos += 3
+        elif get(pos) == "IDENTIFIER":
+            if get(pos + 2) in ["PLUS", "MINUS"] and get(pos + 3) in ["PLUS", "MINUS"]:
+                if get(pos + 2) == get(pos + 3):
+                    name = get(pos + 1)
+                    type = get(pos + 2)
+                    pos += 4
 
-        elif get(pos) == "LPAREN":
-            if get(pos + 2) == "RPAREN":
-                temp_tokens = []
-                type = get(pos + 1)
-                pos += 3
-
-                while True:
-                    if get(pos) == "SEMICOLON":
-                        temp_tokens.append(get(pos))
-                        break
+                    if get(pos) in ["SEMICOLON", "LPAREN", "RPAREN", "PLUS", "MINUS", "SLASH", "ASTERISK", "MODULUS", "EQUALS" * 2, "NOT" + "EQUALS", "GREATER", "GREATER" + "EQUALS", "LESS", "LESS" + "EQUALS", "OR", "AND", "NOT"]:
+                        ast.append({"type": type.replace("PLUS", "increment").replace("MINUS", "decrement"), "value": name})
+                        if get(pos) == "SEMICOLON": pos += 1
 
                     else:
-                        temp_tokens.append(get(pos))
-                        pos += 1
+                        error("expected ';'")
 
-                if get(pos) == "SEMICOLON":
-                    ast.append({"type": "cast", "cast_type": type, "value": parser(temp_tokens, file, create_json)[0]})
-                    pos += 1
-
-        elif get(pos) == "NAME":
-            if get(pos + 2) == "EQUALS":
+            elif get(pos + 2) in ["EQUALS", "PLUS" + "EQUALS", "MINUS" + "EQUALS", "ASTERISK" + "EQUALS", "SLASH" + "EQUALS", "MODULUS" + "EQUALS"]:
                 temp_tokens = []
                 name = get(pos + 1)
+                type = get(pos + 2)
                 pos += 3
 
                 while True:
@@ -1371,31 +1012,40 @@ def parser(tokens, file, create_json):
                         temp_tokens.append(get(pos))
                         pos += 1
 
+                value = parser(temp_tokens, file)[0]
+
+                if type == "PLUS" + "EQUALS": value = {"type": "add", "left": {"type": "IDENTIFIER", "value": name}, "right": value}
+                if type == "MINUS" + "EQUALS": value = {"type": "sub", "left": {"type": "IDENTIFIER", "value": name}, "right": value}
+                if type == "ASTERISK" + "EQUALS": value = {"type": "mul", "left": {"type": "IDENTIFIER", "value": name}, "right": value}
+                if type == "SLASH" + "EQUALS": value = {"type": "div", "left": {"type": "IDENTIFIER", "value": name}, "right": value}
+                if type == "MODULUS" + "EQUALS": value = {"type": "mod", "left": {"type": "IDENTIFIER", "value": name}, "right": value}
+
                 if get(pos) == "SEMICOLON":
-                    ast.append({"type": "var", "value_type": None, "name": name, "value": parser(temp_tokens, file, create_json)[0]})
+                    ast.append({"type": "var", "value_type": None, "name": name, "value": value})
                     pos += 1
 
-            else:
-                if get(pos + 2) == "SEMICOLON":
-                    ast.append({"type": "NAME", "value": get(pos + 1)})
-                    pos += 3
-
-        elif get(pos) == "CALL":
-            if get(pos + 2) == "LPAREN":
+            elif get(pos + 2) == "LPAREN":
                 name = get(pos + 1)
                 args, pos = get_call_args(pos + 2)
 
-                if get(pos) == "SEMICOLON":
+                if get(pos) in ["SEMICOLON", "LPAREN", "RPAREN", "PLUS", "MINUS", "SLASH", "ASTERISK", "MODULUS", "EQUALS" * 2, "NOT" + "EQUALS", "GREATER", "GREATER" + "EQUALS", "LESS", "LESS" + "EQUALS", "OR", "AND", "NOT"]:
                     ast.append({"type": "call", "name": name, "args": args})
-                    pos += 1
+                    if get(pos) == "SEMICOLON": pos += 1
 
                 else:
                     error("expected ';'")
 
+            else:
+                if get(pos + 2) in ["SEMICOLON", "LPAREN", "RPAREN", "PLUS", "MINUS", "SLASH", "ASTERISK", "MODULUS", "EQUALS" * 2, "NOT" + "EQUALS", "GREATER", "GREATER" + "EQUALS", "LESS", "LESS" + "EQUALS", "OR", "AND", "NOT"]:
+                    ast.append({"type": "IDENTIFIER", "value": get(pos + 1)})
+                    if get(pos + 2) == "SEMICOLON": pos += 3
+                    else: pos += 2
+
         elif get(pos) in ["VOID", "BOOL", "INT", "FLOAT", "STRING", "AUTO"]:
-            if get(pos + 2) == "SEMICOLON":
+            if get(pos + 2) in ["SEMICOLON", "LPAREN", "RPAREN", "PLUS", "MINUS", "SLASH", "ASTERISK", "MODULUS", "EQUALS" * 2, "NOT" + "EQUALS", "GREATER", "GREATER" + "EQUALS", "LESS", "LESS" + "EQUALS", "OR", "AND", "NOT"]:
                 ast.append({"type": get(pos), "value": get(pos + 1)})
-                pos += 3
+                if get(pos + 2) == "SEMICOLON": pos += 3
+                else: pos += 2
 
             else:
                 if "." in get(pos + 2):
@@ -1421,11 +1071,11 @@ def parser(tokens, file, create_json):
                             pos += 1
 
                     if get(pos) == "SEMICOLON":
-                        ast.append({"type": "var", "value_type": type, "name": name, "value": parser(temp_tokens, file, create_json)[0]})
+                        ast.append({"type": "var", "value_type": type, "name": name, "value": parser(temp_tokens, file)[0]})
                         pos += 1
 
                 elif get(pos + 3) == "SEMICOLON":
-                    if get(pos + 1) == "NAME":
+                    if get(pos + 1) == "IDENTIFIER":
                         ast.append({"type": "var", "value_type": type, "name": name, "value": {"type": type, "value": None}})
                         pos += 4
 
@@ -1444,45 +1094,38 @@ def parser(tokens, file, create_json):
             ast.append({"type": "NULL", "value": "NULL"})
             pos += 1
 
-    if create_json:
-        name = os.path.splitext(os.path.split(file)[1])[0]
-
-        if name == "init":
-            dirs = os.path.split(file)[0].split("/")
-            name = dirs[len(dirs) - 1]
-
-        with open(f"{name}_ast.json", "w") as file:
-            file.write(json.dumps(ast, indent = 4))
-
     return ast
 
-def interpreter(ast, file, isbase, islib, functions, variables, return_type, library_functions, include_folders, create_json, svariables = {}, sfunctions = {}, already_included = [], pre_included = []):
-    def set_text_attr(color):
-        console_handle = ctypes.windll.kernel32.GetStdHandle(-11)
-        ctypes.windll.kernel32. SetConsoleTextAttribute(console_handle, color)
-
+def interpreter(ast, file, isbase, islib, functions, variables, return_type, library_functions, include_folders, svariables = {}, sfunctions = {}, already_included = [], pre_included = []):
+    variables["__file__"] = {"type": "STRING", "value": file}
+    
     def error(msg, file = file, type = "error", terminated = False):
         print(f"{file}:", end = " ", flush = True)
-        set_text_attr(12)
+        tools.set_text_attr(12)
         print(f"{type}: ", end = "", flush = True)
-        set_text_attr(7)
+        tools.set_text_attr(7)
         print(msg, end = "\n", flush = True)
         if terminated: print("program terminated.")
         sys.exit(-1)
 
     def warning(message, file = file, type = "warning"):
         print(f"{file}:", end = " ", flush = True)
-        set_text_attr(13)
+        tools.set_text_attr(13)
         print(f"{type}: ", end = "", flush = True)
-        set_text_attr(7)
+        tools.set_text_attr(7)
         print(message, end = "\n", flush = True)
 
     def define_standards(file, functions, variables, library_functions, include_folders):
         library_functions.update(std.std["functions"])
-        variables["__file__"] = {"type": "STRING", "value": {file: "STRING"}}
+        variables["__OSNAME__"] = {"type": "STRING", "value": os.name}
+        variables["__MACHINE__"] = {"type": "STRING", "value": platform.machine()}
+        variables["__SYSTEM__"] = {"type": "STRING", "value": platform.system()}
+        variables["__ARCH__"] = {"type": "STRING", "value": platform.architecture()[0]}
+        variables["__PLATFORM__"] = {"type": "STRING", "value": sys.platform}
+        variables["__NODE__"] = {"type": "STRING", "value": platform.node()}
 
     def proccess_string(string):
-        return string.replace("\\n", "\n").replace("\\\\", "\\").replace("\\t", "\t").replace("\\\"", "\"")
+        return string.replace("\\n", "\n").replace("\\\\", "\\").replace("\\t", "\t").replace("\\\"", "\"").replace("mavish", "♥ mavish ♥")
 
     if isbase or islib:
         if isbase:
@@ -1508,7 +1151,7 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
             if i["name"] == "main" and i["return_type"] == "INT" and i["args"] == {} and not found_main:
                 if isbase:
                     found_main = True
-                    error_code = interpreter(functions[i["name"]]["ast"], file, False, False, functions, variables, i["return_type"], library_functions, include_folders, create_json, variables.copy(), functions.copy())
+                    error_code = interpreter(functions[i["name"]]["ast"], file, False, False, functions, variables, i["return_type"], library_functions, include_folders, variables.copy(), functions.copy())
                     
                     if error_code in ["BREAK", "CONTINUE"]:
                         error("cant use '" + error_code.lower() + "' here")
@@ -1521,7 +1164,7 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                             error_code = error_code["value"]
 
         elif i["type"] == "namespace":
-            temp_variables, temp_functions, temp_library_functions = interpreter(i["ast"], file, False, False, functions.copy(), variables.copy(), None, library_functions.copy(), include_folders, create_json)
+            temp_variables, temp_functions, temp_library_functions = interpreter(i["ast"], file, False, False, functions.copy(), variables.copy(), None, library_functions.copy(), include_folders)
             
             for j in temp_variables:
                 if j not in variables:
@@ -1545,25 +1188,28 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                         variables[i["value"]]["value"] = str(int(variables[i["value"]]["value"]) + (1 if i["type"] == "increment" else -1))
 
                     elif variables[i["value"]]["type"] == "FLOAT":
-                        variables[i["value"]]["value"] = str(float(variables[i["value"]]["value"]).lower().replace("f", "")) + (1 if i["type"] == "increment" else -1) + "f"
+                        variables[i["value"]]["value"] = str(float(variables[i["value"]]["value"].lower().replace("f", "")) + (1 if i["type"] == "increment" else -1)) + "f"
 
                     else:
                         error("unknown error")
 
                 else:
                     error("'" + i["value"] + "' should be an integer or float value")
+                
+            if len(ast) == 1:
+                return variables[i["value"]]
 
         elif i["type"] in ["break", "continue"]:
             if isbase: error("cant use '" + i["type"] + "' here")
             return i["type"].upper()
                 
         elif i["type"] == "var":
-            value = interpreter([i["value"]], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
+            value = interpreter([i["value"]], file, False, False, functions, variables, "VOID", library_functions, include_folders)
 
             if i["value_type"] == None:
                 if i["name"] in variables:
                     if value["type"] != variables[i["name"]]["type"]:
-                        value = interpreter([{"type": "cast", "cast_type": variables[i["name"]]["type"], "value": value}], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
+                        value = interpreter([{"type": "cast", "cast_type": variables[i["name"]]["type"], "value": value}], file, False, False, functions, variables, "VOID", library_functions, include_folders)
                         
                     variables[i["name"]] = value.copy()
 
@@ -1580,7 +1226,7 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                             error("aaaaugh")
 
                     elif value["type"] != i["value_type"]:
-                        value = interpreter([{"type": "cast", "cast_type": i["value_type"], "value": value}], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
+                        value = interpreter([{"type": "cast", "cast_type": i["value_type"], "value": value}], file, False, False, functions, variables, "VOID", library_functions, include_folders)
                         
                     variables[i["name"]] = value.copy()
 
@@ -1640,7 +1286,7 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                 if file_path == None:
                     error("'" + i["value"] + "'" + " " + "was not found")
 
-                temp = interpreter(parser(lexer(tools.read_file(file_path), file_path, create_json), file_path, create_json), file_path, False, True, {}, {}, None, {}, include_folders, create_json)
+                temp = interpreter(parser(lexer(tools.read_file(file_path), file_path), file_path), file_path, False, True, {}, {}, None, {}, include_folders)
 
                 if not i["all"]:
                     library = {"functions": {}, "variables": {}, "library_functions": {}}
@@ -1663,8 +1309,8 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                     functions.update(temp[1])
                     library_functions.update(temp[2])
 
-        elif i["type"] in ["NAME", "AUTO", "BOOL", "STRING", "INT", "FLOAT", "VOID", "NULL"]:
-            if i["type"] == "NAME":
+        elif i["type"] in ["IDENTIFIER", "AUTO", "BOOL", "STRING", "INT", "FLOAT", "VOID", "NULL"]:
+            if i["type"] == "IDENTIFIER":
                 if i["value"] in variables:
                     return variables[i["value"]].copy()
 
@@ -1694,7 +1340,7 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                 return i
 
         elif i["type"] == "not":
-            value = interpreter([i["value"]], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
+            value = interpreter([i["value"]], file, False, False, functions, variables, "VOID", library_functions, include_folders)
 
             if value["type"] == "BOOL":
                 if value["value"] == "TRUE":
@@ -1710,7 +1356,7 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                 error("'!' operator can only use with bools")
 
         elif i["type"] == "cast":
-            value = interpreter([i["value"]], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
+            value = interpreter([i["value"]], file, False, False, functions, variables, "VOID", library_functions, include_folders)
             
             if i["cast_type"] == "STRING":
                 if value["type"] == "STRING":
@@ -1733,7 +1379,7 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                     return value
                     
                 elif value["type"] == "FLOAT":
-                    return {"type": "INT", "value": str(int(str(value["value"]).lower().replace("f", "")))}
+                    return {"type": "INT", "value": str(int(float(value["value"].lower().replace("f", ""))))}
 
                 elif value["type"] == "NULL":
                     return {"type": "INT", "value": "0"}
@@ -1781,20 +1427,276 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
             else:
                 error("can't cast '" + value["type"].lower() + "' into '" + i["cast_type"].lower() + "'")
 
+        elif i["type"] == "switch":
+            value = interpreter([i["value"]], file, False, False, functions, variables, None, library_functions, include_folders)
+            match = False
+
+            for j in i["cases"]:
+                if j != "default":
+                    case_value = interpreter([i["cases"][j]["value"]], file, False, False, functions, variables, None, library_functions, include_folders)
+
+                    if value == case_value:
+                        match = True
+                        interpreter(i["cases"][j]["ast"], file, False, False, functions, variables, None, library_functions, include_folders)
+                        break
+
+            if match == False:
+                if "default" in i["cases"]:
+                    interpreter(i["cases"]["default"]["ast"], file, False, False, functions, variables, None, library_functions, include_folders)
+
+        elif i["type"] == "or":
+            left = interpreter([i["left"]], file, False, False, functions, variables, None, library_functions, include_folders)
+            right = interpreter([i["right"]], file, False, False, functions, variables, None, library_functions, include_folders)
+
+            if left["type"] == "BOOL" and right["type"] == "BOOL":
+                left = True if left["value"] == "TRUE" else False
+                right = True if right["value"] == "TRUE" else False
+
+                if left or right:
+                    return {"type": "BOOL", "value": "TRUE"}
+
+                else:
+                    return {"type": "BOOL", "value": "FALSE"}
+
+            else:
+                error("can't perform or operation with '" + left["type"] + "' and '" + right["type"] + "' types")
+
+        elif i["type"] == "and":
+            left = interpreter([i["left"]], file, False, False, functions, variables, None, library_functions, include_folders)
+            right = interpreter([i["right"]], file, False, False, functions, variables, None, library_functions, include_folders)
+
+            if left["type"] == "BOOL" and right["type"] == "BOOL":
+                left = True if left["value"] == "TRUE" else False
+                right = True if right["value"] == "TRUE" else False
+
+                if left and right:
+                    return {"type": "BOOL", "value": "TRUE"}
+
+                else:
+                    return {"type": "BOOL", "value": "FALSE"}
+
+            else:
+                error("can't perform and operation with '" + left["type"] + "' and '" + right["type"] + "' types")
+
+        elif i["type"] == "notequals":
+            left = interpreter([i["left"]], file, False, False, functions, variables, None, library_functions, include_folders)
+            right = interpreter([i["right"]], file, False, False, functions, variables, None, library_functions, include_folders)
+
+            if left != right:
+                return {"type": "BOOL", "value": "TRUE"}
+
+            else:
+                return {"type": "BOOL", "value": "FALSE"}
+
+        elif i["type"] == "equalsequals":
+            left = interpreter([i["left"]], file, False, False, functions, variables, None, library_functions, include_folders)
+            right = interpreter([i["right"]], file, False, False, functions, variables, None, library_functions, include_folders)
+
+            if left == right:
+                return {"type": "BOOL", "value": "TRUE"}
+
+            else:
+                return {"type": "BOOL", "value": "FALSE"}
+
+        elif i["type"] == "less":
+            left = interpreter([i["left"]], file, False, False, functions, variables, None, library_functions, include_folders)
+            right = interpreter([i["right"]], file, False, False, functions, variables, None, library_functions, include_folders)
+
+            if left["type"] in ["FLOAT", "INT"] and right["type"] in ["FLOAT", "INT"]:
+                isfloat = left["type"] == "FLOAT" or right["type"] == "FLOAT"
+
+                if isfloat:
+                    left = float(left["value"].replace("f", ""))
+                    right = float(right["value"].replace("f", ""))
+
+                else:
+                    left = int(left["value"])
+                    right = int(right["value"])
+
+                if left < right:
+                    return {"type": "BOOL", "value": "TRUE"}
+
+                else:
+                    return {"type": "BOOL", "value": "FALSE"}
+
+            else:
+                error("can't perform less operation with '" + left["type"] + "' and '" + right["type"] + "' types")
+
+        elif i["type"] == "lessequals":
+            left = interpreter([i["left"]], file, False, False, functions, variables, None, library_functions, include_folders)
+            right = interpreter([i["right"]], file, False, False, functions, variables, None, library_functions, include_folders)
+
+            if left["type"] in ["FLOAT", "INT"] and right["type"] in ["FLOAT", "INT"]:
+                isfloat = left["type"] == "FLOAT" or right["type"] == "FLOAT"
+
+                if isfloat:
+                    left = float(left["value"].replace("f", ""))
+                    right = float(right["value"].replace("f", ""))
+
+                else:
+                    left = int(left["value"])
+                    right = int(right["value"])
+
+                if left <= right:
+                    return {"type": "BOOL", "value": "TRUE"}
+
+                else:
+                    return {"type": "BOOL", "value": "FALSE"}
+
+            else:
+                error("can't perform less operation with '" + left["type"] + "' and '" + right["type"] + "' types")
+
+        elif i["type"] == "greater":
+            left = interpreter([i["left"]], file, False, False, functions, variables, None, library_functions, include_folders)
+            right = interpreter([i["right"]], file, False, False, functions, variables, None, library_functions, include_folders)
+
+            if left["type"] in ["FLOAT", "INT"] and right["type"] in ["FLOAT", "INT"]:
+                isfloat = left["type"] == "FLOAT" or right["type"] == "FLOAT"
+
+                if isfloat:
+                    left = float(left["value"].replace("f", ""))
+                    right = float(right["value"].replace("f", ""))
+
+                else:
+                    left = int(left["value"])
+                    right = int(right["value"])
+
+                if left > right:
+                    return {"type": "BOOL", "value": "TRUE"}
+
+                else:
+                    return {"type": "BOOL", "value": "FALSE"}
+
+            else:
+                error("can't perform less operation with '" + left["type"] + "' and '" + right["type"] + "' types")
+
+        elif i["type"] == "greaterequals":
+            left = interpreter([i["left"]], file, False, False, functions, variables, None, library_functions, include_folders)
+            right = interpreter([i["right"]], file, False, False, functions, variables, None, library_functions, include_folders)
+
+            if left["type"] in ["FLOAT", "INT"] and right["type"] in ["FLOAT", "INT"]:
+                isfloat = left["type"] == "FLOAT" or right["type"] == "FLOAT"
+
+                if isfloat:
+                    left = float(left["value"].replace("f", ""))
+                    right = float(right["value"].replace("f", ""))
+
+                else:
+                    left = int(left["value"])
+                    right = int(right["value"])
+
+                if left >= right:
+                    return {"type": "BOOL", "value": "TRUE"}
+
+                else:
+                    return {"type": "BOOL", "value": "FALSE"}
+
+            else:
+                error("can't perform less operation with '" + left["type"] + "' and '" + right["type"] + "' types")
+
+        elif i["type"] == "add":
+            left = interpreter([i["left"]], file, False, False, functions, variables, None, library_functions, include_folders)
+            right = interpreter([i["right"]], file, False, False, functions, variables, None, library_functions, include_folders)
+
+            if left["type"] in ["FLOAT", "INT"] and right["type"] in ["FLOAT", "INT"]:
+                isfloat = left["type"] == "FLOAT" or right["type"] == "FLOAT"
+
+                if isfloat:
+                    return {"type": "FLOAT", "value": str(float(left["value"].replace("f", "")) + float(right["value"].replace("f", "")))}
+
+                else:
+                    return {"type": "INT", "value": str(int(left["value"]) + int(right["value"]))}
+                    
+            elif left["type"] == "STRING" and right["type"] == "STRING":
+                return {"type": "STRING", "value": str(left["value"] + right["value"])}
+
+            else:
+                error("can't perform add operation with '" + left["type"] + "' and '" + right["type"] + "' types")
+
+        elif i["type"] == "sub":
+            left = interpreter([i["left"]], file, False, False, functions, variables, None, library_functions, include_folders)
+            right = interpreter([i["right"]], file, False, False, functions, variables, None, library_functions, include_folders)
+
+            if left["type"] in ["FLOAT", "INT"] and right["type"] in ["FLOAT", "INT"]:
+                isfloat = left["type"] == "FLOAT" or right["type"] == "FLOAT"
+
+                if isfloat:
+                    return {"type": "FLOAT", "value": str(float(left["value"].replace("f", "")) - float(right["value"].replace("f", "")))}
+
+                else:
+                    return {"type": "INT", "value": str(int(left["value"]) - int(right["value"]))}
+
+            else:
+                error("can't perform subtract operation with '" + left["type"] + "' and '" + right["type"] + "' types")
+
+        elif i["type"] == "mul":
+            left = interpreter([i["left"]], file, False, False, functions, variables, None, library_functions, include_folders)
+            right = interpreter([i["right"]], file, False, False, functions, variables, None, library_functions, include_folders)
+
+            if left["type"] in ["FLOAT", "INT"] and right["type"] in ["FLOAT", "INT"]:
+                isfloat = left["type"] == "FLOAT" or right["type"] == "FLOAT"
+
+                if isfloat:
+                    return {"type": "FLOAT", "value": str(float(left["value"].replace("f", "")) * float(right["value"].replace("f", "")))}
+
+                else:
+                    return {"type": "INT", "value": str(int(left["value"]) * int(right["value"]))}
+
+            elif left["type"] == "STRING" and right["type"] == "INT":
+                return {"type": "STRING", "value": left["value"] * int(right["value"])}
+
+            else:
+                error("can't perform multiply operation with '" + left["type"] + "' and '" + right["type"] + "' types")
+
+        elif i["type"] == "div":
+            left = interpreter([i["left"]], file, False, False, functions, variables, None, library_functions, include_folders)
+            right = interpreter([i["right"]], file, False, False, functions, variables, None, library_functions, include_folders)
+
+            if left["type"] in ["FLOAT", "INT"] and right["type"] in ["FLOAT", "INT"]:
+                isfloat = left["type"] == "FLOAT" or right["type"] == "FLOAT"
+
+                if float(left["value"].replace("f", "")) == 0.0 or float(right["value"].replace("f", "")) == 0.0:
+                    error("divide by zero")
+
+                if isfloat:
+                    return {"type": "FLOAT", "value": str(float(left["value"].replace("f", "")) / float(right["value"].replace("f", "")))}
+
+                else:
+                    return {"type": "FLOAT", "value": str(int(left["value"]) / int(right["value"]))}
+
+            else:
+                error("can't perform divide operation with '" + left["type"] + "' and '" + right["type"] + "' types")
+
+        elif i["type"] == "mod":
+            left = interpreter([i["left"]], file, False, False, functions, variables, None, library_functions, include_folders)
+            right = interpreter([i["right"]], file, False, False, functions, variables, None, library_functions, include_folders)
+
+            if left["type"] in ["FLOAT", "INT"] and right["type"] in ["FLOAT", "INT"]:
+                isfloat = left["type"] == "FLOAT" or right["type"] == "FLOAT"
+
+                if isfloat:
+                    return {"type": "FLOAT", "value": str(float(left["value"].replace("f", "")) % float(right["value"].replace("f", "")))}
+
+                else:
+                    return {"type": "INT", "value": str(int(left["value"]) % int(right["value"]))}
+
+            else:
+                error("can't perform remainder operation with '" + left["type"] + "' and '" + right["type"] + "' types")
+
         elif i["type"] == "for":
             sec_temp_variables, sec_temp_functions, sec_temp_library_functions = variables.copy(), functions.copy(), library_functions.copy()
-            interpreter(i["init"].copy(), file, False, False, functions, variables, None, library_functions, include_folders, create_json)
+            interpreter(i["init"], file, False, False, functions, variables, None, library_functions, include_folders)
             temp_variables, temp_functions, temp_library_functions = variables.copy(), functions.copy(), library_functions.copy()
-            condition = parse_condition(i["condition"].copy(), file, variables, functions, library_functions, include_folders, create_json) if len(i["condition"]) != 0 else True
+            condition = interpreter([i["condition"]], file, False, False, functions, variables, None, library_functions, include_folders) if len(i["condition"]) != 0 else True
 
-            while condition:
-                response = interpreter(i["ast"].copy(), file, False, False, functions, variables, None, library_functions, include_folders, create_json)
-                interpreter(i["update"].copy(), file, False, False, functions, variables, "PASS", library_functions, include_folders, create_json)
+            while condition["type"] == "BOOL" and condition["value"] == "TRUE":
+                response = interpreter(i["ast"], file, False, False, functions, variables, None, library_functions, include_folders)
+                interpreter(i["update"], file, False, False, functions, variables, "PASS", library_functions, include_folders)
                 if response != None:
                     if "type" in response:
                         if response["type"] != "NULL":
                             return response
-                condition = parse_condition(i["condition"].copy(), file, variables, functions, library_functions, include_folders, create_json) if len(i["condition"]) != 0 else True
+                condition = interpreter([i["condition"]], file, False, False, functions, variables, None, library_functions, include_folders) if len(i["condition"]) != 0 else True
 
                 for j in list(set(variables) - set(temp_variables)): del variables[j]
                 for j in list(set(functions) - set(temp_functions)): del functions[j]
@@ -1807,7 +1709,7 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
 
         elif i["type"] == "do":
             temp_variables, temp_functions, temp_library_functions = variables.copy(), functions.copy(), library_functions.copy()
-            response = interpreter(i["ast"].copy(), file, False, False, functions, variables, "PASS", library_functions, include_folders, create_json)
+            response = interpreter(i["ast"], file, False, False, functions, variables, "PASS", library_functions, include_folders)
             if response != None:
                 if "type" in response:
                     if response["type"] != "NULL":
@@ -1821,16 +1723,16 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
 
         elif i["type"] == "do while":
             temp_variables, temp_functions, temp_library_functions = variables.copy(), functions.copy(), library_functions.copy()
-            interpreter(i["ast"].copy(), file, False, False, functions, variables, None, library_functions, include_folders, create_json)
-            result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions, library_functions, include_folders, create_json)
+            interpreter(i["ast"], file, False, False, functions, variables, None, library_functions, include_folders)
+            result_report[index] = interpreter([i["condition"]], file, False, False, functions, variables, None, library_functions, include_folders)
 
-            while result_report[index]:
-                response = interpreter(i["ast"].copy(), file, False, False, functions, variables, "PASS", library_functions, include_folders, create_json)
+            while result_report[index]["type"] == "BOOL" and result_report[index]["value"] == "TRUE":
+                response = interpreter(i["ast"], file, False, False, functions, variables, "PASS", library_functions, include_folders)
                 if response != None:
                     if "type" in response:
                         if response["type"] != "NULL":
                             return response
-                result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions, library_functions, include_folders, create_json)
+                result_report[index] = interpreter([i["condition"]], file, False, False, functions, variables, None, library_functions, include_folders)
 
                 for j in list(set(variables) - set(temp_variables)): del variables[j]
                 for j in list(set(functions) - set(temp_functions)): del functions[j]
@@ -1843,15 +1745,15 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
 
         elif i["type"] == "while":
             temp_variables, temp_functions, temp_library_functions = variables.copy(), functions.copy(), library_functions.copy()
-            result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions, library_functions, include_folders, create_json)
+            result_report[index] = interpreter([i["condition"]], file, False, False, functions, variables, None, library_functions, include_folders)
 
-            while result_report[index]:
-                response = interpreter(i["ast"].copy(), file, False, False, functions, variables, "PASS", library_functions, include_folders, create_json)
+            while result_report[index]["type"] == "BOOL" and result_report[index]["value"] == "TRUE":
+                response = interpreter(i["ast"], file, False, False, functions, variables, "PASS", library_functions, include_folders)
                 if response != None:
                     if "type" in response:
                         if response["type"] != "NULL":
                             return response
-                result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions, library_functions, include_folders, create_json)
+                result_report[index] = interpreter([i["condition"]], file, False, False, functions, variables, None, library_functions, include_folders)
 
                 for j in list(set(variables) - set(temp_variables)): del variables[j]
                 for j in list(set(functions) - set(temp_functions)): del functions[j]
@@ -1860,10 +1762,10 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
 
         elif i["type"] == "if":
             temp_variables, temp_functions, temp_library_functions = variables.copy(), functions.copy(), library_functions.copy()
-            result_report[index] = parse_condition(i["condition"].copy(), file, variables, functions, library_functions, include_folders, create_json)
+            result_report[index] = interpreter([i["condition"]], file, False, False, functions, variables, None, library_functions, include_folders)
 
-            if result_report[index]:
-                response = interpreter(i["ast"].copy(), file, False, False, functions, variables, "PASS", library_functions, include_folders, create_json)
+            if result_report[index]["type"] == "BOOL" and result_report[index]["value"] == "TRUE":
+                response = interpreter(i["ast"], file, False, False, functions, variables, "PASS", library_functions, include_folders)
                 if response in ["BREAK", "CONTINUE"]: return response
                 if response != None:
                     if "type" in response:
@@ -1878,11 +1780,11 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
             temp_variables, temp_functions, temp_library_functions = variables.copy(), functions.copy(), library_functions.copy()
 
             if ast[index]["type"] in ["if", "else if"] and (index - 1 in result_report):
-                if not result_report[index - 1]:
-                    result_report[index] = parse_condition(i["condition"], file, variables, functions, library_functions, include_folders, create_json)
+                if result_report[index - 1]["type"] == "BOOL" and result_report[index - 1]["value"] == "FALSE":
+                    result_report[index] = interpreter([i["condition"]], file, False, False, functions, variables, None, library_functions, include_folders)
 
-                    if result_report[index]:
-                        response = interpreter(i["ast"].copy(), file, False, False, functions, variables, "PASS", library_functions, include_folders, create_json)
+                    if result_report[index]["type"] == "BOOL" and result_report[index]["value"] == "TRUE":
+                        response = interpreter(i["ast"], file, False, False, functions, variables, "PASS", library_functions, include_folders)
                         if response in ["BREAK", "CONTINUE"]: return response
                         if response != None:
                             if "type" in response:
@@ -1904,8 +1806,8 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
 
             if ast[index - 1]["type"] in ["if", "else if", "while"] and (index - 1 in result_report):
 
-                if not result_report[index - 1]:
-                    response = interpreter(i["ast"].copy(), file, False, False, functions, variables, "PASS", library_functions, include_folders, create_json)
+                if result_report[index - 1]["type"] == "BOOL" and result_report[index - 1]["value"] == "FALSE":
+                    response = interpreter(i["ast"], file, False, False, functions, variables, "PASS", library_functions, include_folders)
                     if response in ["BREAK", "CONTINUE"]: return response
                     if response != None:
                         if "type" in response:
@@ -1940,7 +1842,7 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                 if i["value"]["type"] != None:
                     error("can't return any value in non-void functions")
 
-            returned = interpreter([i["value"]], file, False, False, functions, variables, "VOID", library_functions, include_folders, create_json)
+            returned = interpreter([i["value"]], file, False, False, functions, variables, "VOID", library_functions, include_folders)
 
             if returned["type"] != return_type and return_type not in ["PASS"]:
                 error("expected '" + return_type.lower() + "' got '" + returned["type"].lower() + "'")
@@ -1969,11 +1871,11 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                     temp = []
 
                     for j in i["args"]:
-                        temp.append(interpreter([j], file, False, False, functions, variables, None, library_functions, include_folders, create_json))
+                        temp.append(interpreter([j], file, False, False, functions, variables, None, library_functions, include_folders))
 
                     for index, j in enumerate(library_functions[i["name"]]["args"].values()):
                         if temp[index]["type"] != j and temp[index]["type"] not in ["NULL"]:
-                            temp[index] = interpreter([{"type": "cast", "cast_type": j, "value": temp[index]}], file, False, False, functions, variables, "INT", library_functions, include_folders, create_json)
+                            temp[index] = interpreter([{"type": "cast", "cast_type": j, "value": temp[index]}], file, False, False, functions, variables, "INT", library_functions, include_folders)
                         
                     new_temp = {}
 
@@ -1992,7 +1894,7 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                             else: error("unknown value")
 
                         elif j["type"] == "STRING":
-                            new_temp[name] = proccess_string(j["value"])
+                            new_temp[name] = j["value"]
 
                         elif j["type"] == "NULL":
                             new_temp[name] = None
@@ -2006,8 +1908,7 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                         "functions": functions,
                         "variables": variables,
                         "library_functions": library_functions,
-                        "include_folders": include_folders,
-                        "create_json": create_json
+                        "include_folders": include_folders
                     }
 
                     returned = library_functions[i["name"]]["func"](enviroment)
@@ -2033,11 +1934,11 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                     temp = []
 
                     for j in i["args"]:
-                        temp.append(interpreter([j], file, False, False, functions, variables, None, library_functions, include_folders, create_json))
+                        temp.append(interpreter([j], file, False, False, functions, variables, None, library_functions, include_folders))
 
                     for index, j in enumerate(functions[i["name"]]["args"].values()):
                         if temp[index]["type"] != j and temp[index]["type"] not in ["NULL"]:
-                            temp[index] = interpreter([{"type": "cast", "cast_type": j, "value": temp[index]}], file, False, False, functions, variables, None, library_functions, include_folders, create_json)
+                            temp[index] = interpreter([{"type": "cast", "cast_type": j, "value": temp[index]}], file, False, False, functions, variables, None, library_functions, include_folders)
 
                     temp_vars = svariables.copy()
 
@@ -2048,7 +1949,7 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
                     if i["name"] not in sfunctions:
                         sfunctions[i["name"]] = functions[i["name"]]
 
-                    returned = interpreter(functions[i["name"]]["ast"], file, False, False, sfunctions.copy(), temp_vars, functions[i["name"]]["type"], library_functions, include_folders, create_json, variables.copy(), functions.copy())
+                    returned = interpreter(functions[i["name"]]["ast"], file, False, False, sfunctions.copy(), temp_vars, functions[i["name"]]["type"], library_functions, include_folders, variables.copy(), functions.copy())
 
                     if returned in ["BREAK", "CONTINUE"]:
                         error("'break' or 'continue' keyword used in wrong place")
@@ -2085,43 +1986,119 @@ def interpreter(ast, file, isbase, islib, functions, variables, return_type, lib
 
 def main():
     argv = sys.argv
+    start_time = time.time()
+    version = "0.0.11a"
 
-    def get(index, message, file, type = "error", terminated = False):
-        try: return argv[index + 1]
-        except IndexError: tools.error(message, file, type, terminated)
-
-    version = "0.0.10a"
-
-    file = get(0, "no input files", "rsharp", "fatal error", True)
-
-    include_folders = [f"{tools.get_dir()}\\include\\", "C:\\RSharp\\include\\", ".\\include\\", ".\\"]
-    create_json = False
+    include_folders = [f"{tools.get_dir()}/include/", "./"]
+    if sys.platform == "win32": include_folders.append("C:\\RSharp\\include\\")
     console = True
+    bytecode = True
+    timeit = False
+    get_tokens = False
+    get_ast = False
+    mode = None
+    file = None
 
-    for i in argv:
-        if i.startswith("-I"):
-            include_folders.append(i[2:])
+    for i in argv[1:]:
+        if i[0] == "-":
+            arg = i[1:].split("=")
 
-        elif i.startswith("-l"):
-            command = i[2:]
+            if arg[0][0] == "I":
+                include_folders.append(arg[0][1:])
 
-            if command == "json":
-                create_json = True
+            elif arg[0][:3] == "rmI":
+                include_folders.pop(include_folders.index(arg[0][3:]))
 
-            elif command == "noconsole":
-                console = False
+            elif arg[0] == "timeit":
+                if arg[1] == "true": timeit = True
+                if arg[1] == "false": timeit = False
 
-    if "--interprete" in argv:
-        interpreter(parser(lexer(tools.read_file(file), file, create_json), file, create_json), file, True, False, {}, {}, None, {}, include_folders, create_json)
+            elif arg[0] == "noconsole":
+                if arg[1] == "true": console = False
+                if arg[1] == "false": console = True
 
-    elif "--transpile-python" in argv:
-        transpiler.python(parser(lexer(tools.read_file(file), file, create_json), file, create_json), file)
+            elif arg[0] == "console":
+                if arg[1] == "true": console = True
+                if arg[1] == "false": console = False
 
-    elif "--compile" in argv:
-        variables, functions, library_functions, files = tools.auto_include(
+            elif arg[0] == "gettok":
+                if arg[1] == "true": get_tokens = True
+                if arg[1] == "false": get_tokens = False
+
+            elif arg[0] == "getast":
+                if arg[1] == "true": get_ast = True
+                if arg[1] == "false": get_ast = False
+
+            elif arg[0] == "bytecode":
+                if arg[1] == "true": bytecode = True
+                if arg[1] == "false": bytecode = False
+
+            else:
+                tools.error(f"unknown operation '{i}'", file)
+
+        elif i in ["version", "run", "build"]:
+            if mode == None: mode = i
+            else: tools.error("mode already setted", file)
+
+        else:
+            if file == None: file = i
+            else: tools.error("file already setted", file)
+
+    if mode == None: mode = "run"
+    if file == None and mode != "version": tools.error("no input files", "rsharp", "fatal error", True)
+    if file != None and mode != "version":
+        if not os.path.isfile(file):
+            tools.error("file not found", "rsharp", "fatal error", True)
+
+    if mode == "run":
+        if os.path.splitext(file)[1] not in [".rsx", ".rsxd", ".rsxc", ".rsxp"]:
+            tools.error(f"invalid extension: '{os.path.splitext(file)[1]}'", file)
+
+        ast = None
+
+        if os.path.splitext(file)[1] == ".rsxc":
+            with open(os.path.splitext(file)[0] + ".rsxc", "rb") as f:
+                ast = pickle.loads(f.read())["ast"]
+
+        else:
+            file_content = tools.read_file(file)
+
+            if os.path.splitext(file)[0] + ".rsxc" in os.listdir() and bytecode:
+                with open(os.path.splitext(file)[0] + ".rsxc", "rb") as f:
+                    content = pickle.loads(f.read())
+
+                    if "version" not in content:
+                        tools.error("bytecode version didn't match [bytecode: " + content["version"] + f", current: {version}]", file)
+
+                    if content["version"] != version:
+                        tools.error("bytecode version didn't match [bytecode: " + content["version"] + f", current: {version}]", file)
+
+                    if content["file_content"] == hashlib.sha256(file_content.encode()).digest():
+                        ast = content["ast"]
+
+            if ast == None:
+                tokens = lexer(file_content, file)
+                if get_tokens: print(tokens)
+                ast = parser(tokens, file)
+
+                if bytecode:
+                    content = {"ast": ast, "file_content": hashlib.sha256(file_content.encode()).digest(), "version": version}
+                    with open(os.path.splitext(file)[0] + ".rsxc", "wb") as f: f.write(pickle.dumps(content))
+
+        if get_ast: print(ast)
+        interpreter(ast, file, True, False, {}, {}, None, {}, include_folders)
+
+    elif mode == "build":
+        if os.path.splitext(file)[1] not in [".rsx", ".rsxd", ".rsxc", ".rsxp"]:
+            tools.error(f"invalid extension: '{os.path.splitext(file)[1]}'", file)
+
+        variables, functions, library_functions, files, tokens, ast = tools.auto_include(
             file = file,
             include_folders = include_folders
         )
+
+        if get_tokens: print(tokens)
+        if get_ast: print(ast)
 
         builder.build_program(
             path = file,
@@ -2133,13 +2110,19 @@ def main():
             pre_included = files,
         )
 
-    elif "--version" in argv:
-        print(f"R# {version}")
+    elif mode == "version":
+        tools.set_text_attr(12)
+        print(f"R# {version}", flush = True)
+        tools.set_text_attr(7)
 
     else:
-        interpreter(parser(lexer(tools.read_file(file), file, create_json), file, create_json), file, True, False, {}, {}, None, {}, include_folders, create_json)
+        tools.error("unknown error", file)
+
+    if timeit:
+        print("finished in:", time.time() - start_time)
 
     return 0
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try: sys.exit(main())
+    except KeyboardInterrupt: ...

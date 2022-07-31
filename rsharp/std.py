@@ -1,7 +1,5 @@
 import sys, os
 
-sys.dont_write_bytecode = True
-
 import rsharp.tools as tools
 
 tools.create_library("std")
