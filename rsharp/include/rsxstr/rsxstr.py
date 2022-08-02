@@ -2,6 +2,14 @@ from rsharp.tools import *
 
 create_library("rsxstr")
 
+@create_function("INT", {"a": "STRING"})
+def strlen(environment):
+    return len(environment["args"]["a"])
+
+@create_function("STRING", {"a": "STRING", "b": "INT"})
+def getchar(environment):
+    return environment["args"]["a"][environment["args"]["b"]]
+
 @create_function("STRING", {"a": "STRING", "b": "STRING"})
 def addstr(environment):
     return environment["args"]["a"] + environment["args"]["b"]
