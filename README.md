@@ -14,25 +14,22 @@ An interpreted statically typed multi paradigm general purpose programming langu
 start install.bat
 ```
 
-## How to run a program
+## How to [run/build] a R# program
 ```
-python main.py main.rsx run
-```
-
-## How to build a program
-```
-python main.py main.rsx build
+cd rsharp
+python main.py main.rsx [run/build]
 ```
 
-## How to run/build a R# bytecode
+## How to [run/build] a R# bytecode
 ```
-python main.py main.rsxc run/build
+cd rsharp
+python main.py main.rsxc [run/build]
 ```
 
 ## How to make a library using python
 ### library.py
 ```python
-from tools import *
+from rsharp.tools import *
 
 create_library("library")
 
@@ -41,6 +38,18 @@ def log(environment):
     print(environment["args"]["message"], flush = True)
 
 library = pack_library()
+```
+
+### library.py (alternative and experimental way)
+```python
+from rsharp import rsxlib
+
+rsxlib.begin()
+
+def log(message: str) -> None:
+    print(environment["args"]["message"], flush = True)
+
+rsxlib.end()
 ```
 
 ### main.rsx
