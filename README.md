@@ -8,7 +8,7 @@ An interpreted statically typed multi paradigm general purpose programming langu
 ![R# Icon](rsharp/icon_alternative.png)
 
 # Requirements
-- python 3.10 or newer
+- Python 3.10 or newer
 
 # Getting Started
 ## How to install
