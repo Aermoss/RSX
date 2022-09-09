@@ -118,6 +118,30 @@ int main() {
 }
 ```
 
+## Web Server
+```c++
+include "rsxio" : *;
+include "rsxsocket" : *;
+
+int main() {
+    auto server = std::socket(std::AF_INET, std::SOCK_STREAM);
+    std::bind(server, "localhost", 5656);
+    std::listen(server);
+
+    string index = "HTTP/1.1 200 OK\n\n<p>Hello, World!</p>";
+
+    while (true) {
+        auto connection = std::accept(server);
+        string response = std::recv(connection, 1024);
+        std::rout(response + std::endl());
+        std::send(connection, index);
+        std::close(connection);
+    }
+    
+    return 0;
+}
+```
+
 # Libraries
 - rsxbuild
 - rsxthread
