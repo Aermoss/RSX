@@ -142,6 +142,26 @@ int main() {
 }
 ```
 
+## Raylib
+```c++
+include "rsxraylib" : *;
+
+int main() {
+    InitWindow(1200, 600, "R#");
+    // SetTargetFPS(60);
+
+    while (!WindowShouldClose()) {
+        BeginDrawing();
+        ClearBackground(RAYWHITE);
+        DrawFPS(10, 10);
+        EndDrawing();
+    }
+
+    CloseWindow();
+    return 0;
+}
+```
+
 # Libraries
 - rsxbuild
 - rsxthread
