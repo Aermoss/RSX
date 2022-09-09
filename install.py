@@ -7,12 +7,12 @@ def main(argv):
     shutil.rmtree("build", ignore_errors = True)
     shutil.rmtree("dist", ignore_errors = True)
     os.system("python build.py")
+    shutil.rmtree("rsharp.egg-info")
 
     if sys.platform == "win32":
         with open("rsharp.exe", "rb") as file:
             data = file.read()
 
-        shutil.rmtree("rsharp.egg-info")
         os.remove("rsharp.exe")
 
         if "RSharp" in os.listdir("C:\\"):
