@@ -40,7 +40,7 @@ def log(environment):
 library = pack_library()
 ```
 
-### Using RSXLib (alternative and experimental way)
+### Using RSXLib (experimental)
 ```python
 from rsharp import rsxlib
 
