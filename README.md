@@ -9,9 +9,14 @@ An interpreted statically typed multi paradigm general purpose programming langu
 
 # Getting Started
 ## How to install
-### Windows
+### Windows (Compiles R# source files and places them in C:\RSharp, also installs the R# python library)
 ```
-start install.bat
+.\install.bat
+```
+
+### Linux (Installs the R# python library)
+```
+./install.sh
 ```
 
 ## How to [run/build] a R# program
