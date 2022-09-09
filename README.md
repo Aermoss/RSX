@@ -7,6 +7,9 @@ An interpreted statically typed multi paradigm general purpose programming langu
 # R# Icon
 ![R# Icon](rsharp/icon_alternative.png)
 
+# Requirements
+- python 3.10 or newer
+
 # Getting Started
 ## How to install
 ### Windows (Compiles R# source files and places them in C:\RSharp, also installs the R# python library)
@@ -14,7 +17,7 @@ An interpreted statically typed multi paradigm general purpose programming langu
 .\install.bat
 ```
 
-### Linux (Installs the R# python library)
+### Linux (Compiles R# source files and installs the R# python library)
 ```
 ./install.sh
 ```
