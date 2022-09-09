@@ -26,8 +26,8 @@ cd rsharp
 python main.py main.rsxc [run/build]
 ```
 
-## How to make a library using python
-### library.py
+## How to make a R# library with python
+### Using R# Tools
 ```python
 from rsharp.tools import *
 
@@ -40,7 +40,7 @@ def log(environment):
 library = pack_library()
 ```
 
-### library.py (alternative and experimental way)
+### Using RSXLib (alternative and experimental way)
 ```python
 from rsharp import rsxlib
 
@@ -52,16 +52,7 @@ def log(message: str) -> None:
 rsxlib.end()
 ```
 
-### main.rsx
-```c++
-include "library.py";
-
-int main() {
-    library::log("Hello, World!");
-}
-```
-
-## How to make a library using R# header files
+## How to make a R# library with R# header files
 ### library.rsxh
 ```c++
 include "rsxio" : *;
