@@ -170,7 +170,7 @@ int main(string[] args) {
 A package manager for R#
 
 # Raid Logo
-<img src="rsxpy/raid_logo.png" width="512" height="512"/>
+<img src="rsxpy/raidpy/raid_logo.png" width="512" height="512"/>
 
 ## How to create a new Raid project
 ```
