@@ -1,0 +1,6 @@
+namespace std {
+    include "rsxstd/rsxstd.py" : *;
+
+    const int EXIT_SUCCESS = 0;
+    const int EXIT_FAILURE = -1;
+}

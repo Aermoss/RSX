@@ -1,0 +1,13 @@
+include "rsxraylib/consts.rsxh" : *;
+
+include "rsxraylib/core.py" : *;
+include "rsxraylib/shapes.py" : *;
+include "rsxraylib/textures.py" : *;
+include "rsxraylib/text.py" : *;
+include "rsxraylib/models.py" : *;
+include "rsxraylib/audio.py" : *;
+include "rsxraylib/structs.py" : *;
+
+namespace extras {
+    include "rsxraylib/extras.py" : *;
+}

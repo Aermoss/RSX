@@ -1,0 +1,4 @@
+namespace std {
+    include "rsxsocket/constants.rsxh" : *;
+    include "rsxsocket/rsxsocket.py" : *;
+}

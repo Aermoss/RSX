@@ -1,0 +1,7 @@
+namespace std {
+    include "rsxgui/rsxgui.py" : *;
+
+    namespace messagebox {
+        include "rsxgui/messagebox.py" : *;
+    }
+}
