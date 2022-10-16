@@ -5,7 +5,7 @@ An interpreted statically typed multi paradigm general purpose programming langu
 ![R# Logo](rsxpy/logo.png)
 
 # R# Icon
-<img src="rsxpy/icon.png" width="256" height="256"/>
+![R# Icon](rsxpy/icon.png)
 
 # Requirements
 - Python 3.10 or higher
@@ -170,7 +170,7 @@ int main(string[] args) {
 A package manager for R#
 
 # Raid Logo
-<img src="rsxpy/raidpy/raid_logo.png" width="512" height="512"/>
+![Raid Logo](rsxpy/raidpy/raid_logo.png)
 
 ## How to create a new Raid project
 ```
