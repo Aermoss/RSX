@@ -1,1 +1,0 @@
-namespace std { include "rsxio/rsxio.py" : *; }

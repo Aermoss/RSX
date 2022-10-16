@@ -1,2 +1,0 @@
-include "rsxsdl2/constants.rsxh" : *;
-include "rsxsdl2/rsxsdl2.py" : *;
