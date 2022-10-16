@@ -2,17 +2,17 @@
 An interpreted statically typed multi paradigm general purpose programming language designed for cross platform applications.
 
 # R# Logo
-![R# Logo](rsharp/logo.png)
+<img src="rsxpy/logo.png" width="512" height="512"/>
 
 # R# Icon
-![R# Icon](rsharp/icon_alternative.png)
+<img src="rsxpy/icon.png" width="256" height="256"/>
 
 # Requirements
-- Python 3.10 or newer
+- Python 3.10 or higher
 
 # Getting Started
 ## How to install
-### Windows (Compiles R# source files and places them in C:\RSharp, also installs the R# python library)
+### Windows (Compiles R# source files and places them in C:\RSX, also installs the R# python library)
 ```
 .\install.bat
 ```
@@ -24,20 +24,20 @@ An interpreted statically typed multi paradigm general purpose programming langu
 
 ## How to [run/build] a R# program
 ```
-cd rsharp
-python main.py main.rsx [run/build]
+cd rsxpy
+python core.py main.rsx [run/build]
 ```
 
 ## How to [run/build] a R# bytecode
 ```
-cd rsharp
-python main.py main.rsxc [run/build]
+cd rsxpy
+python core.py main.rsxc [run/build]
 ```
 
 ## How to make a R# library with python
 ### Using R# Tools
 ```python
-from rsharp.tools import *
+from rsxpy.tools import *
 
 create_library("library")
 
@@ -48,9 +48,9 @@ def log(environment):
 library = pack_library()
 ```
 
-### Using RSXLib (experimental)
+### Using RSXLib
 ```python
-from rsharp import rsxlib
+from rsxpy import rsxlib
 
 rsxlib.begin()
 
@@ -66,7 +66,7 @@ rsxlib.end()
 include "rsxio" : *;
 
 void log(string message) {
-    std::rout(message + std::endl()));
+    std::rout(message + std::endl());
 }
 ```
 
@@ -74,7 +74,7 @@ void log(string message) {
 ```c++
 include "library.rsxh";
 
-int main() {
+int main(string[] args) {
     library::log("Hello, World!");
 }
 ```
@@ -96,7 +96,6 @@ python main.py main.rsx run -Imy-include-folder
 - run
 - build
 
-
 # Examples
 ## Hello, World!
 ```c++
@@ -104,7 +103,7 @@ include "rsxio" : *;
 
 // using namespace std;
 
-int main() {
+int main(string[] args) {
     std::rout("Hello, World!" + std::endl());
     return 0;
 }
@@ -112,26 +111,23 @@ int main() {
 
 ## Builder
 ```c++
-include "rsxbuild" : *;
-include "rsxsys" : *;
-include "rsxio" : *;
+include "rsxbuild", "rsxsys", "rsxio" : *;
 
-int main() {
+int main(string[] args) {
     std::rout("file name > ");
     std::build_program(
         std::rin(),
-        std::getdir() + "\\include\\",
-        true, std::getdir() + "\\icon.ico"
+        {std::getdir() + "/include/"},
+        true, std::getdir() + "/icon.ico"
     ); return 0;
 }
 ```
 
 ## Web Server
 ```c++
-include "rsxio" : *;
-include "rsxsocket" : *;
+include "rsxsocket", "rsxio" : *;
 
-int main() {
+int main(string[] args) {
     auto server = std::socket(std::AF_INET, std::SOCK_STREAM);
     std::bind(server, "localhost", 5656);
     std::listen(server);
@@ -154,7 +150,7 @@ int main() {
 ```c++
 include "rsxraylib" : *;
 
-int main() {
+int main(string[] args) {
     InitWindow(1200, 600, "R#");
     // SetTargetFPS(60);
 
@@ -168,6 +164,24 @@ int main() {
     CloseWindow();
     return 0;
 }
+```
+
+# The R# Package Manager: Raid
+A package manager for R#
+
+# Raid Logo
+<img src="rsxpy/raid_logo.png" width="512" height="512"/>
+
+## How to create a new Raid project
+```
+cd rsxpy/raid
+python core.py new console my_console_project
+```
+
+## How to [run/build] a Raid project
+```
+cd rsxpy/raid
+python core.py [run/build] my_console_project
 ```
 
 # Libraries
@@ -187,4 +201,4 @@ int main() {
 - rsxtime
 - rsxos
 - rsxsocket
-- rsxsdl2 [indev]
+- rsxsdl2
