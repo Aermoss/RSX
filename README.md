@@ -2,7 +2,7 @@
 An interpreted statically typed multi paradigm general purpose programming language designed for cross platform applications.
 
 # R# Logo
-<img src="rsxpy/logo.png" width="512" height="512"/>
+![R# Logo](rsxpy/logo.png)
 
 # R# Icon
 <img src="rsxpy/icon.png" width="256" height="256"/>
