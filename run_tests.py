@@ -17,12 +17,26 @@ def main(argv):
         "arrays:arrays_seven": {"args": [[1.2, 2.6, 3.1, 4.9], 2], "result": 3.1},
         "arrays:arrays_eight": {"args": [[0, 1, 2, 3], [4, 5, 6, 7, 8]], "result": [0, 1, 2, 3, 4, 5, 6, 7, 8]},
         "arrays:arrays_nine": {"args": [[0, 1, 2, 3]], "result": 4},
+        "arrays:arrays_ten": {"args": [[0, 1, 2, 3]], "result": [3, 2, 1, 0]},
         "scopes:scopes_one": {"args": [], "result": 8},
         "scopes:scopes_two": {"args": [], "result": 10},
         "variables:variables_one": {"args": [], "result": -30},
         "maths:circle_circumference": {"args": [8], "result": 50.26548245743669},
         "maths:circle_area": {"args": [8], "result": 201.06192982974676},
-        "maths:hypotenuse": {"args": [4, 3], "result": 5}
+        "maths:hypotenuse": {"args": [4, 3], "result": 5},
+        "keywords:keywords_one": {"args": [], "result": 10},
+        "keywords:keywords_two": {"args": [], "result": 10},
+        "keywords:keywords_three": {"args": [], "result": 50},
+        "keywords:keywords_four": {"args": [], "result": 60},
+        "keywords:keywords_five": {"args": [], "result": 70},
+        "keywords:keywords_six": {"args": [], "result": 40},
+        "functions:functions_one": {"args": [], "result": None},
+        "functions:functions_two": {"args": [], "result": 10},
+        "functions:functions_three": {"args": [], "result": 20.23},
+        "functions:functions_four": {"args": [], "result": "RSX"},
+        "functions:functions_five": {"args": [], "result": True},
+        "threads:threads_one": {"args": [], "result": 30},
+        "casting:casting_one": {"args": [128], "result": "128"}
     }
 
     passed, failed = 0, 0

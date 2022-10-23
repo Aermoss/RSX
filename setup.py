@@ -15,7 +15,7 @@ with open("MANIFEST.in", "w") as file:
 
 setup(
     name = "rsxpy",
-    version = "0.1.0",
+    version = "0.1.1",
     entry_points = {
         "console_scripts": [
             "rsxpy = rsxpy.core:main",

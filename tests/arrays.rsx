@@ -48,3 +48,14 @@ int[] arrays_eight(int[] a, int[] b) {
 int arrays_nine(int[] a) {
     return a.length();
 }
+
+int[] arrays_ten(int[] a) {
+    int[a.length()] b;
+    int index = 0;
+
+    for (int i = a.length() - 1; i >= 0; i--) {
+        b[index++] = a[i];
+    }
+
+    return b;
+}
