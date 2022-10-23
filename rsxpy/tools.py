@@ -1,6 +1,5 @@
 import rsxpy.core as core
 import rsxpy.rsxlib as rsxlib
-import rsxpy.preprocessor as preprocessor
 
 import sys, os, string, pickle
 import importlib, ctypes, hashlib
@@ -47,7 +46,7 @@ class ArrayValue:
         return {"type": "ARRAY", "array_type": type, "size": size, "value": [py_to_rsx_value(i) for i in value]}
 
 def get_version():
-    return "0.1.0"
+    return "0.1.1"
 
 def read_file(file, encoding = "utf-8"):
     return open(file, "r", encoding = encoding).read() + "\n"
@@ -115,6 +114,7 @@ def recompile_libs(include_folder = get_dir() + "/include"):
         include_library(context, [i], False, None, None)
 
 def rsx_to_py_value(value):
+    if value == None: value = {"type": "NULL", "value": "NULL"}
     if value["type"] == "INT": return int(value["value"])
     elif value["type"] == "FLOAT": return float(value["value"].lower().replace("f", ""))
     elif value["type"] == "BOOL":
@@ -127,9 +127,9 @@ def rsx_to_py_value(value):
     else: error("unknown type", "<rsx_to_py_value>")
 
 def py_to_rsx_value(value):
-    if isinstance(value, int): return IntType(value)
+    if type(value) == int: return IntType(value)
+    elif type(value) == bool: return BoolType(value)
     elif isinstance(value, float): return FloatType(value)
-    elif isinstance(value, bool): return BoolType(value)
     elif isinstance(value, str): return StringType(value)
     elif isinstance(value, list): return ArrayValue(value)
     elif value == None: return {"type": "NULL", "value": "NULL"}
@@ -392,7 +392,7 @@ def include_library(context, libs, namespace, names, special_namespace):
                                 ast = content["ast"]
 
             if ast is None:
-                ast = core.parser(core.lexer(preprocessor.preprocessor(read_file(file_path), context.include_folders), file_path), file_path)
+                ast = core.parser(core.lexer(read_file(file_path), file_path), file_path)
 
                 with open(os.path.splitext(file_path)[0] + ".rsxc", "wb") as file:
                     file.write(dump_bytecode(ast, file_content))
@@ -435,7 +435,7 @@ def auto_include(file, include_folders):
     context = core.Context(
         ast = core.parser(
             core.lexer(
-                preprocessor.preprocessor(read_file(file = file), include_folders),
+                read_file(file = file), include_folders,
                 file = file
             ),
             file = file

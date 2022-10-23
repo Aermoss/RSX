@@ -18,7 +18,6 @@ try:
     import rsxpy.tools as tools
     import rsxpy.std as std
     import rsxpy.builder as builder
-    import rsxpy.preprocessor as preprocessor
 
 except ImportError:
     sys.path.append(os.path.split(os.getcwd())[0])
@@ -26,7 +25,6 @@ except ImportError:
     import rsxpy.tools as tools
     import rsxpy.std as std
     import rsxpy.builder as builder
-    import rsxpy.preprocessor as preprocessor
 
 keywords = {
     "auto": "AUTO",
@@ -103,11 +101,31 @@ def lexer(data, file):
     pos = 0
     char = data[pos]
     tokens = []
-    row, col = 1, 1
 
     lines[file] = data.split("\n")
 
+    cache = [[0, 1, 1]]
+
+    def get_row_col():
+        row, col = cache[len(cache) - 1][1], cache[len(cache) - 1][2]
+        index = cache[len(cache) - 1][0]
+
+        for i in data[cache[len(cache) - 1][0]:]:
+            if index == pos:
+                cache.append([pos, row, col])
+                return row, col
+
+            index += 1
+
+            if i == "\n":
+                col = 1
+                row += 1
+
+            else:
+                col += 1
+
     def error(message, file = file, type = "error", terminated = False):
+        row, col = get_row_col()
         print(f"{file}:{row}:{col}:", end = " ", flush = True)
         tools.set_text_attr(12)
         print(f"{type}:", end = " ", flush = True)
@@ -117,6 +135,7 @@ def lexer(data, file):
         sys.exit(-1)
 
     def warning(message, file = file, type = "warning"):
+        row, col = get_row_col()
         print(f"{file}:{row}:{col}:", end = " ", flush = True)
         tools.set_text_attr(13)
         print(f"{type}:", end = " ", flush = True)
@@ -127,31 +146,15 @@ def lexer(data, file):
         try: return data[index]
         except: return ""
 
+    def append(value):
+        row, col = get_row_col()
+        tokens.append({"value": value, "row": row, "col": col})
+
     last_char = ""
-    last_pos = 0
 
     while len(data) > pos:
-        temp = 0
-
-        for i in data[last_pos:pos]:
-            if row - last_row - temp <= 0:
-                if i in "\r\n":
-                    temp += 1
-                    row += 1
-                    col = 0
-
-            else:
-                if i in "\r\n":
-                    col = 0
-
-            col += 1
-
-        last_row = row
-        last_pos = pos
-
         while char.isspace():
             pos += 1
-            col += 1
             char = get(pos)
 
         if char.isalpha() or char in ["_"]:
@@ -165,13 +168,13 @@ def lexer(data, file):
 
             if id_str in keywords:
                 if id_str in constants:
-                    tokens.append({"value": constants[id_str], "row": row, "col": col})
+                    append(constants[id_str])
 
-                tokens.append({"value": keywords[id_str], "row": row, "col": col})
+                append(keywords[id_str])
 
             else:
-                tokens.append({"value": "IDENTIFIER", "row": row, "col": col})
-                tokens.append({"value": id_str, "row": row, "col": col})
+                append("IDENTIFIER")
+                append(id_str)
 
         elif char.isdigit() or char == "." and get(pos + 1) != ".":
             num_str = ""
@@ -195,7 +198,7 @@ def lexer(data, file):
             if base == "decimal":
                 if num_str.count(".") == 1:
                     if num_str[-1:] == ".": num_str += "0"
-                    tokens.append({"value": "FLOAT", "row": row, "col": col})
+                    append("FLOAT")
 
                     if num_str.count("f") not in [0, 1]:
                         error("more than one 'f' found in a float")
@@ -203,7 +206,7 @@ def lexer(data, file):
                     num_str = num_str.replace("f", "")
 
                 elif num_str.count(".") == 0:
-                    tokens.append({"value": "INT", "row": row, "col": col})
+                    append("INT")
 
                     if num_str.count("f") != 0:
                         error("used 'f' in an integer value")
@@ -211,12 +214,12 @@ def lexer(data, file):
                 else:
                     error("more than one '.' found in a value")
 
-                tokens.append({"value": num_str, "row": row, "col": col})
+                append(num_str)
             
             elif base in ["hexadecimal", "binary", "octal"]:
                 base_int = int(base.replace("hexadecimal", "16").replace("binary", "2").replace("octal", "8"))
-                tokens.append({"value": "INT", "row": row, "col": col})
-                tokens.append({"value": str(int(num_str, base_int)), "row": row, "col": col})
+                append("INT")
+                append(str(int(num_str, base_int)))
 
             else:
                 error("unknown number system")
@@ -266,8 +269,8 @@ def lexer(data, file):
                     pos += 1
                     char = get(pos)
 
-            tokens.append({"value": "STRING", "row": row, "col": col})
-            tokens.append({"value": string.replace("mavish", "♥ mavish ♥"), "row": row, "col": col})
+            append("STRING")
+            append(string.replace("mavish", "♥ mavish ♥"))
             pos += 1
             char = get(pos)
 
@@ -294,67 +297,66 @@ def lexer(data, file):
                     char = get(pos)
 
                 else:
-                    tokens.append({"value": operators[char], "row": row, "col": col})
+                    append(operators[char])
                     pos += 1
                     char = get(pos)
 
             elif char in operators:
                 if tokens[len(tokens) - 1]["value"] in ["GREATER", "LESS", "NOT", "EQUALS", "PLUS", "MINUS", "ASTERISK", "SLASH", "MODULUS"] and char == "=" and last_char != " ":
-                    tokens.append({"value": tokens[len(tokens) - 1]["value"] + operators[char], "row": row, "col": col})
+                    append(tokens[len(tokens) - 1]["value"] + operators[char])
                     tokens.pop(len(tokens) - 2)
 
                 elif tokens[len(tokens) - 1]["value"] == "MINUS" and char == ">" and last_char != " ":
-                    tokens.append({"value": "ARROW", "row": row, "col": col})
+                    append("ARROW")
                     tokens.pop(len(tokens) - 2)
 
                 elif tokens[len(tokens) - 1]["value"] in ["GREATER", "LESS"] and char in [">", "<"]:
-                    if char == "<": tokens.append({"value": "BITWISELEFT", "row": row, "col": col})
-                    elif char == ">": tokens.append({"value": "BITWISERIGHT", "row": row, "col": col})
+                    if char == "<": append("BITWISELEFT")
+                    elif char == ">": append("BITWISERIGHT")
                     tokens.pop(len(tokens) - 2)
 
                 elif char == last_char == "|":
-                    tokens.append({"value": "OR", "row": row, "col": col})
+                    append("OR")
                     tokens.pop(len(tokens) - 2)
 
                 elif char == "|":
-                    tokens.append({"value": "BITWISEOR", "row": row, "col": col})
+                    append("BITWISEOR")
 
                 elif char == last_char == "&":
-                    tokens.append({"value": "AND", "row": row, "col": col})
+                    append("AND")
                     tokens.pop(len(tokens) - 2)
 
                 elif char == "&":
-                    tokens.append({"value": "BITWISEAND", "row": row, "col": col})
+                    append("BITWISEAND")
 
                 elif char == "~":
-                    tokens.append({"value": "BITWISENOT", "row": row, "col": col})
+                    append("BITWISENOT")
 
                 elif char == "^":
-                    tokens.append({"value": "BITWISEXOR", "row": row, "col": col})
+                    append("BITWISEXOR")
 
                 elif char == "." and get(pos + 1) == "." and get(pos + 2) == "." and get(pos + 3) != ".":
-                    tokens.append({"value": "THREEDOT", "row": row, "col": col})
+                    append("THREEDOT")
                     pos += 2
 
                 elif char in ["-", "+"] and get(pos + 1) in ["-", "+"] and char == get(pos + 1) and tokens[len(tokens) - 2]["value"] == "IDENTIFIER":
-                    tokens.append({"value": char.replace("+", "POSTINCREMENT").replace("-", "POSTDECREMENT"), "row": row, "col": col})
+                    append(char.replace("+", "POSTINCREMENT").replace("-", "POSTDECREMENT"))
                     pos += 1
 
                 elif char in ["-", "+"] and get(pos + 1) in ["-", "+"] and char == get(pos + 1):
-                    tokens.append({"value": char.replace("+", "PREINCREMENT").replace("-", "PREDECREMENT"), "row": row, "col": col})
+                    append(char.replace("+", "PREINCREMENT").replace("-", "PREDECREMENT"))
                     pos += 1
 
-                elif char in ["-", "+"] and get(pos + 1) not in [" ", char]:
-                    tokens.append({"value": char.replace("-", "NEGATIVE").replace("+", "POSITIVE"), "row": row, "col": col})
+                elif char in ["-", "+"] and get(pos + 1) not in [" ", char] + list(operators.keys()):
+                    append(char.replace("-", "NEGATIVE").replace("+", "POSITIVE"))
 
                 else:
-                    tokens.append({"value": operators[char], "row": row, "col": col})
+                    append(operators[char])
 
                 pos += 1
                 char = get(pos)
 
                 if char in "\r\n":
-                    row += 1
                     pos += 1
                     char = get(pos)
 
@@ -635,12 +637,15 @@ def parser(tokens, file):
         temp_tokens = []
         ignore = 0
         ignore_curly = 0
+        ignore_bracket = 0
 
         while True:
             if get(temp_pos) in stop_tokens:
-                if ignore == 0 and ignore_curly == 0: break
+                if ignore == 0 and ignore_curly == 0 and ignore_bracket == 0: break
                 if get(temp_pos) == "RPAREN": ignore -= 1
                 if get(temp_pos) == "LPAREN": ignore += 1
+                if get(temp_pos) == "RBRACKET": ignore_bracket -= 1
+                if get(temp_pos) == "LBRACKET": ignore_bracket += 1
                 if get(temp_pos) == "RCURLYBRACKET": ignore_curly -= 1
                 if get(temp_pos) == "LCURLYBRACKET": ignore_curly += 1
 
@@ -648,7 +653,7 @@ def parser(tokens, file):
                 temp_pos += 1
 
             elif get(temp_pos) == "COMMA":
-                if ignore == 0 and ignore_curly == 0: break
+                if ignore == 0 and ignore_curly == 0 and ignore_bracket == 0: break
                 temp_tokens.append(get(temp_pos, True))
                 temp_pos += 1
 
@@ -660,6 +665,16 @@ def parser(tokens, file):
             elif get(temp_pos) == "RPAREN":
                 temp_tokens.append(get(temp_pos, True))
                 ignore -= 1
+                temp_pos += 1
+
+            elif get(temp_pos) == "LBRACKET":
+                temp_tokens.append(get(temp_pos, True))
+                ignore_bracket += 1
+                temp_pos += 1
+
+            elif get(temp_pos) == "RBRACKET":
+                temp_tokens.append(get(temp_pos, True))
+                ignore_bracket -= 1
                 temp_pos += 1
 
             elif get(temp_pos) == "LCURLYBRACKET":
@@ -897,9 +912,6 @@ def parser(tokens, file):
                         condition_tokens.append(get(condition_pos, True))
                         condition_pos += 1
 
-                    elif get(condition_pos) in ["LCURLYBRACKET"]:
-                        error("expected ')'")
-
                     else:
                         condition_tokens.append(get(condition_pos, True))
                         condition_pos += 1
@@ -925,8 +937,7 @@ def parser(tokens, file):
                     if ignore == 0 and ignore_curly == 0:
                         if get(temp_pos) == "SEMICOLON":
                             array = False
-                            
-                        break
+                            break
 
                     if get(temp_pos) == "RPAREN": ignore -= 1
                     if get(temp_pos) == "LPAREN": ignore += 1
@@ -946,7 +957,7 @@ def parser(tokens, file):
 
                 while True:
                     temp_tokens, pos = collect_tokens(pos, stop_tokens = ["RCURLYBRACKET", "SEMICOLON"])
-                    values.append(parser(temp_tokens, file)[0])
+                    if len(temp_tokens) != 1: values.append(parser(temp_tokens, file)[0])
 
                     if get(pos) == "COMMA":
                         pos += 1
@@ -1204,26 +1215,22 @@ def parser(tokens, file):
                 pos += 2
 
         elif get(pos) == "IDENTIFIER":
-            last = None
-
-            if len(ast) != 0:
-                last = ast[len(ast) - 1]
-
             if get(pos + 2) in assignment_operators:
                 type = get(pos + 2)
                 name = get(pos + 1)
                 temp_tokens, pos = collect_tokens(pos + 3, stop_tokens = ["SEMICOLON"])
                 value = parser(temp_tokens, file)[0]
+                cur = {"type": "IDENTIFIER", "value": name}
 
-                if type == "PLUS" + "EQUALS": value = {"type": "add", "left": last, "right": value}
-                if type == "MINUS" + "EQUALS": value = {"type": "sub", "left": last, "right": value}
-                if type == "ASTERISK" + "EQUALS": value = {"type": "mul", "left": last, "right": value}
-                if type == "SLASH" + "EQUALS": value = {"type": "div", "left": last, "right": value}
-                if type == "BITWISEOR" + "EQUALS": value = {"type": "bitwise or", "left": last, "right": value}
-                if type == "BITWISEXOR" + "EQUALS": value = {"type": "bitwise xor", "left": last, "right": value}
-                if type == "BITWISEAND" + "EQUALS": value = {"type": "bitwise and", "left": last, "right": value}
-                if type == "BITWISELEFT" + "EQUALS": value = {"type": "bitwise left", "left": last, "right": value}
-                if type == "BITWISRIGHT" + "EQUALS": value = {"type": "bitwise right", "left": last, "right": value}
+                if type == "PLUS" + "EQUALS": value = {"type": "add", "left": cur, "right": value}
+                if type == "MINUS" + "EQUALS": value = {"type": "sub", "left": cur, "right": value}
+                if type == "ASTERISK" + "EQUALS": value = {"type": "mul", "left": cur, "right": value}
+                if type == "SLASH" + "EQUALS": value = {"type": "div", "left": cur, "right": value}
+                if type == "BITWISEOR" + "EQUALS": value = {"type": "bitwise or", "left": cur, "right": value}
+                if type == "BITWISEXOR" + "EQUALS": value = {"type": "bitwise xor", "left": cur, "right": value}
+                if type == "BITWISEAND" + "EQUALS": value = {"type": "bitwise and", "left": cur, "right": value}
+                if type == "BITWISELEFT" + "EQUALS": value = {"type": "bitwise left", "left": cur, "right": value}
+                if type == "BITWISRIGHT" + "EQUALS": value = {"type": "bitwise right", "left": cur, "right": value}
 
                 ast.append({"type": "var", "value_type": None, "name": name, "value": value, "const": False})
 
@@ -1258,6 +1265,7 @@ def parser(tokens, file):
                 type = get(pos)
                 temp_tokens, pos = collect_tokens(pos + 1, stop_tokens = ["SEMICOLON"])
                 value = parser(temp_tokens, file)[0]
+                last = {"type": "get", "target": ast[len(ast) - 1], "index": index}
 
                 if type == "PLUS" + "EQUALS": value = {"type": "add", "left": last, "right": value}
                 if type == "MINUS" + "EQUALS": value = {"type": "sub", "left": last, "right": value}
@@ -1354,17 +1362,19 @@ def parser(tokens, file):
                     const = True
                     pos += 1
 
-                if get(pos) in types:
+                if get(pos) in ["VOID", "AUTO"] + types:
                     type = get(pos)
                     size, array_type = None, None
 
                     if get(pos + 1) not in ["IDENTIFIER", "LPAREN", "COMMA", "LBRACKET"]:
+                        if type in ["VOID", "AUTO"]: error("can't use void type like this")
                         ast.append({"type": get(pos), "value": get(pos + 1)})
                         if get(pos + 2) == "SEMICOLON": pos += 3
                         else: pos += 2
 
                     else:
                         if get(pos + 1) == "LBRACKET":
+                            if type in ["VOID", "AUTO"]: error("can't use void type like this")
                             temp_size, pos = get_index(pos + 2)
                             if temp_size["type"] != "NULL": size = temp_size
                             array_type = type
@@ -1392,7 +1402,7 @@ def parser(tokens, file):
                                     ast.append({"type": "func", "return_type": type, "array_type": array_type, "const": const, "name": name, "args": args, "ast": temp_ast, "var_arg": var_arg})
 
                             elif get(pos + 2) == "EQUALS":
-                                name = get(pos + 1)
+                                if type in ["VOID"]: error("can't use void type like this")
                                 temp_tokens, pos = collect_tokens(pos + 3, stop_tokens = ["SEMICOLON"])
                                 ast.append({"type": "var", "value_type": type, "array_type": array_type, "size": size, "name": name, "value": parser(temp_tokens, file)[0], "const": const})
                                 
@@ -1404,6 +1414,8 @@ def parser(tokens, file):
                                     pos += 1
 
                             elif get(pos + 2) in ["SEMICOLON", "COMMA"]:
+                                if type in ["VOID"]: error("can't use void type like this")
+
                                 if get(pos + 2) == "COMMA":
                                     for index, i in enumerate(tokens[first_pos:type_end_pos]):
                                         tokens.insert(pos + index + 3, i)
@@ -1705,7 +1717,7 @@ def interpreter(context: Context):
             context.add_scope(i["name"])
 
             if i["name"] == "main" and i["return_type"] == "INT" and (i["args"] == {"args": {"type": "ARRAY", "array_type": "STRING", "size": None}} or i["args"] == {}):
-                if context.is_main_file() and not context.is_in_function() and context.program_state:
+                if context.is_main_file() and not context.is_in_function() and context.program_state():
                     context.prepare_to_execute("main")
 
                     if i["args"] == {"args": {"type": "ARRAY", "array_type": "STRING", "size": None}}:
@@ -1950,7 +1962,7 @@ def interpreter(context: Context):
                                         ast = content["ast"]
 
                     if ast is None:
-                        ast = parser(lexer(preprocessor.preprocessor(tools.read_file(file_path), context.include_folders), file_path), file_path)
+                        ast = parser(lexer(tools.read_file(file_path), file_path), file_path)
 
                         with open(os.path.splitext(file_path)[0] + ".rsxc", "wb") as file:
                             file.write(tools.dump_bytecode(ast, file_content))
@@ -2008,7 +2020,7 @@ def interpreter(context: Context):
                     if type == None: type = i["type"]
                     if i["type"] != type: tools.error("array type mismatch", context.file)
 
-                return {"type": "ARRAY", "array_type": type, "size": len(elements), "value": elements}
+                return {"type": "ARRAY", "array_type": type, "size": {"type": "INT", "value": str(len(elements))}, "value": elements}
 
         elif i["type"] in ["IDENTIFIER", "AUTO", "BOOL", "STRING", "INT", "FLOAT", "VOID", "NULL"]:
             if i["type"] == "IDENTIFIER":
@@ -2464,6 +2476,10 @@ def interpreter(context: Context):
             right = interpreter(context)
             context.ast = tmp_ast
 
+            if left["type"] in ["FLOAT", "INT"] and right["type"] in ["FLOAT", "INT"]:
+                left = float(left["value"])
+                right = float(right["value"])
+
             if left != right:
                 return {"type": "BOOL", "value": "TRUE"}
 
@@ -2480,6 +2496,10 @@ def interpreter(context: Context):
             context.ast = [i["right"]]
             right = interpreter(context)
             context.ast = tmp_ast
+
+            if left["type"] in ["FLOAT", "INT"] and right["type"] in ["FLOAT", "INT"]:
+                left = float(left["value"])
+                right = float(right["value"])
 
             if left == right:
                 return {"type": "BOOL", "value": "TRUE"}
@@ -2701,7 +2721,7 @@ def interpreter(context: Context):
                 isfloat = left["type"] == "FLOAT" or right["type"] == "FLOAT"
 
                 if float(left["value"].replace("f", "")) == 0.0 or float(right["value"].replace("f", "")) == 0.0:
-                    tools.error("divide by zero", context.file)
+                    tools.error("division by zero", context.file)
 
                 if isfloat:
                     return {"type": "FLOAT", "value": str(float(left["value"].replace("f", "")) / float(right["value"].replace("f", "")))}
@@ -2800,8 +2820,6 @@ def interpreter(context: Context):
                     context.set_scope(tmp)
                     break
 
-            context.rem_parent_scope(tmp)
-            context.delete_scope(cur)
             context.set_scope(tmp)
             if cur in context.scope: context.delete_scope(cur)
             if tmp in context.parent_scopes: context.rem_parent_scope(tmp)
@@ -3119,7 +3137,7 @@ def interpreter(context: Context):
                 if returned["array_type"] != context.current_array_type:
                     tools.error("type mismatch", context.file)
 
-            elif returned["type"] != context.current_return_type and context.current_return_type != None:
+            elif returned["type"] != context.current_return_type and context.current_return_type != None and returned["type"] != "NULL":
                 tmp_ast = context.ast
                 context.ast = [{"type": "cast", "cast_type": context.current_return_type, "value": returned}]
                 returned = interpreter(context)
@@ -3284,10 +3302,12 @@ def interpreter(context: Context):
             tools.error("non-void functions should return a value", context.file)
 
 help = """
+R# Interpreter - RSX
+
 - help: for this page
-- version: for the version of R#
-- run [file] [args]: for running a R# program
-- build [file] [args]: for running a R# program
+- version: for the version of RSX
+- run [file] [args]: for running a RSX program
+- build [file] [args]: for running a RSX program
 
 file for run/build commands: file path (example: main.rsx)
 args for run/build commands: -[timeit/console/noconsole/gettok/getast/bytecode]=[true/false] (example: -timeit=true)
@@ -3297,7 +3317,7 @@ args for run/build commands: -[timeit/console/noconsole/gettok/getast/bytecode]=
 def main():
     argv = sys.argv
     start_time = time.time()
-    version = "0.1.0"
+    version = tools.get_version()
 
     include_folders = ["./", f"{tools.get_dir()}/include/"]
     if sys.platform == "win32" and tools.is_compiled(): include_folders.append("C:\\RSX\\include\\")
@@ -3380,7 +3400,7 @@ def main():
                 ast = content["ast"]
 
         else:
-            file_content = preprocessor.preprocessor(tools.read_file(file), include_folders)
+            file_content = tools.read_file(file)
 
             if os.path.splitext(file)[0] + ".rsxc" in os.listdir() and bytecode:
                 with open(os.path.splitext(file)[0] + ".rsxc", "rb") as f:
@@ -3425,7 +3445,7 @@ def main():
 
     elif mode == "version":
         tools.set_text_attr(12)
-        print(f"R# {version}", flush = True)
+        print(f"RSX {version}", flush = True)
         tools.set_text_attr(7)
 
     elif mode == "help":

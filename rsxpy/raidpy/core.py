@@ -63,6 +63,104 @@ int main(string[] args) {
     return 0;
 }"""
 
+raylib_3dproj_sample = """include "rsxio", "rsxraylib" : *;
+
+float[] project_vertices(float[] vertices, float[] position, float focal_length) {
+    float[(int) (vertices.length() / 3 * 2)] projected_vertices;
+    int index = 0;
+
+    for (int i = 0; i < vertices.length(); i += 3) {
+        if ((focal_length + (vertices[i + 2] + position[2])) == 0 || (focal_length * (vertices[i] + position[0])) == 0 || (focal_length * (vertices[i + 1] + position[1])) == 0)
+            continue;
+            
+        float x_projected = (focal_length * (vertices[i] + position[0])) / (focal_length + (vertices[i + 2] + position[2]));
+        float y_projected = (focal_length * (vertices[i + 1] + position[1])) / (focal_length + (vertices[i + 2] + position[2]));
+        projected_vertices[index++] = x_projected; projected_vertices[index++] = y_projected;
+    }
+
+    return projected_vertices;
+}
+
+float[] scale_vertices(float[] vertices, float scale) {
+    float[vertices.length()] new;
+
+    for (int i = 0; i < vertices.length(); i++) {
+        new[i] = vertices[i] * scale;
+    }
+
+    return new;
+}
+
+int main() {
+    const int width = 1200, height = 600;
+    InitWindow(width, height, "RSX");
+    SetTargetFPS(60);
+
+    float[] vertices = scale_vertices({
+        -0.5f, -0.5f,  0.0f,
+        -0.5f,  0.5f,  0.0f,
+         0.5f,  0.5f,  0.0f,
+         0.5f, -0.5f,  0.0f,
+        -0.5f, -0.5f, -0.5f,
+        -0.5f,  0.5f, -0.5f,
+         0.5f,  0.5f, -0.5f,
+         0.5f, -0.5f, -0.5f,
+    }, 100);
+
+    int[] indices = {
+        0, 1,
+        1, 2,
+        2, 3,
+        3, 0,
+        4, 5,
+        5, 6,
+        6, 7,
+        7, 4,
+        0, 4,
+        1, 5,
+        2, 6,
+        3, 7
+    };
+
+    int[] offset = {width / 2, height / 2};
+    float[] position = {0.0f, 0.0f, 0.0f};
+    float speed = 0.0f;
+
+    float focal_length = 100.0f;
+
+    while (!WindowShouldClose()) {
+        BeginDrawing();
+        ClearBackground(BLACK);
+        DrawText((string) GetFPS() + " FPS", 10, 10, 20, RAYWHITE);
+
+        float[] projected_vertices = project_vertices(vertices, position, focal_length);
+
+        if (IsKeyDown(KEY_W)) position[2] -= speed;
+        if (IsKeyDown(KEY_S)) position[2] += speed;
+        if (IsKeyDown(KEY_A)) position[0] += speed;
+        if (IsKeyDown(KEY_D)) position[0] -= speed;
+        if (IsKeyDown(KEY_SPACE)) position[1] += speed;
+        if (IsKeyDown(KEY_LEFT_SHIFT)) position[1] -= speed;
+        if (IsKeyDown(KEY_LEFT_CONTROL)) speed = 3.0f;
+        else speed = 2.0f;
+
+        for (int i = 0; i < projected_vertices.length(); i += 2)
+            DrawCircle(projected_vertices[i] + offset[0], projected_vertices[i + 1] + offset[1], 5, RAYWHITE);
+
+        for (int i = 0; i < indices.length(); i += 2) {
+            if (projected_vertices.length() >= indices[i] * 2) {
+                DrawLine(projected_vertices[indices[i] * 2] + offset[0], projected_vertices[indices[i] * 2 + 1] + offset[1],
+                         projected_vertices[indices[i + 1] * 2] + offset[0], projected_vertices[indices[i + 1] * 2 + 1] + offset[1], RAYWHITE);
+            }
+        }
+
+        EndDrawing();
+    }
+
+    CloseWindow();
+    return 0;
+}"""
+
 help = """
 - help: for this page
 - version: for the version of raid
@@ -80,7 +178,7 @@ type for new command: [console/raylib/web_server] (example: console)
 
 def main():
     argv = sys.argv
-    version = "0.0.1"
+    version = "0.0.2"
 
     include_folders = ["./", "../include"]
     if sys.platform == "win32" and tools.is_compiled(): include_folders.append("C:\\RSX\\include\\")
@@ -88,7 +186,8 @@ def main():
     samples = {
         "console": console_sample,
         "raylib": raylib_sample,
-        "web_server": web_server_sample
+        "web_server": web_server_sample,
+        "raylib_3dproj": raylib_3dproj_sample
     }
 
     if len(argv) == 1:

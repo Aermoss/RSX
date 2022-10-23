@@ -8,7 +8,7 @@ create_library("rsxthread")
 threads = {}
 
 @create_function("INT", {"func": "STRING", "daemon": "BOOL"})
-def create_thread(environment):
+def thread(environment):
     context = Context(environment["context"].scope["global"][environment["args"]["func"]]["ast"], environment["file"])
     context.return_type = environment["context"].scope["global"][environment["args"]["func"]]["return_type"]
     context.scope = environment["context"].scope.copy()

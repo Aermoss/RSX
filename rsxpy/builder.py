@@ -34,7 +34,7 @@ def build_raid(path):
 
 def build_program(console, context, hidden_imports = ["raylib", "pysdl2", "pysdl2-dll", "tkinter", "tkinter.messagebox"], icon = "icon.ico"):
     with open(context.file.replace("\\", "/"), "r") as file:
-        file_content = rsx.preprocessor.preprocessor(file.read(), context.include_folders)
+        file_content = rsx.file.read()
 
     modules = []
     libfuncs = {}

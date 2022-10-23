@@ -5,7 +5,6 @@ try:
     import rsxpy.tools as tools
     import rsxpy.std as std
     import rsxpy.builder as builder
-    import rsxpy.preprocessor as preprocessor
 
 except ImportError:
     sys.path.append(os.path.split(os.getcwd())[0])
@@ -14,7 +13,6 @@ except ImportError:
     import rsxpy.tools as tools
     import rsxpy.std as std
     import rsxpy.builder as builder
-    import rsxpy.preprocessor as preprocessor
 
 class Module:
     def __init__(self, name):
