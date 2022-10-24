@@ -1,11 +1,11 @@
 # R# - RSX
 An interpreted statically typed multi paradigm general purpose programming language designed for cross platform applications.
 
-# RSX Logo
+# R# Logo
 ![R# Logo](rsxpy/logo.png)
 
 # RSX Icon
-![R# Icon](rsxpy/icon.png)
+![RSX Icon](rsxpy/icon.png)
 
 # Requirements
 - Python 3.10 or higher
