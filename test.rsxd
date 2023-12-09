@@ -1,0 +1,507 @@
+include "rsxio", "rsxterm", "rsxcolor", "rsxstd", "rsxstr", "rsxf", "rsxrvr" : *;
+include "rsxgl", "rsxglfw", "rsximgui", "rsxglm", "rsximg", "rsxmath" : *;
+
+string radiumLoggerNameSyntax = "[RADIUM]: ";
+string radiumLoggerErrorSyntax = "[ERROR]: ";
+string radiumLoggerWarningSyntax = "[WARNING]: ";
+string radiumLoggerInfoSyntax = "[INFO]: ";
+string radiumLoggerErrorSeperatorSyntax = "";
+string radiumLoggerWarningSeperatorSyntax = "";
+string radiumLoggerInfoSeperatorSyntax = "";
+int radiumLoggerErrorSeperatorColor = 7;
+int radiumLoggerWarningSeperatorColor = 7;
+int radiumLoggerInfoSeperatorColor = 7;
+string radiumLoggerErrorMessageStart = "";
+string radiumLoggerErrorMessageEnd = "\n";
+string radiumLoggerWarningMessageStart = "";
+string radiumLoggerWarningMessageEnd = "\n";
+string radiumLoggerInfoMessageStart = "";
+string radiumLoggerInfoMessageEnd = "\n";
+string radiumLog;
+
+int radiumLoggerNameColor = 12, radiumLoggerErrorColor = 12,
+    radiumLoggerWarningColor = 14, radiumLoggerInfoColor = 10,
+    radiumLoggerErrorMessageColor = 14, radiumLoggerWarningMessageColor = 14,
+    radiumLoggerInfoMessageColor = 14, radiumLogLevel = 3;
+
+const int RADIUM_LOG_COLOR_WHITE = 7;
+const int RADIUM_LOG_COLOR_GREEN = 10;
+const int RADIUM_LOG_COLOR_RED = 12;
+const int RADIUM_LOG_COLOR_PINK = 13;
+const int RADIUM_LOG_COLOR_YELLOW = 14;
+
+const int RADIUM_LOG_LEVEL_NULL = 0;
+const int RADIUM_LOG_LEVEL_ERROR = 1;
+const int RADIUM_LOG_LEVEL_WARNING = 2;
+const int RADIUM_LOG_LEVEL_INFO = 3;
+
+int[] radiumWindowArray = {0, };
+
+void radiumLogError(string message) {
+    if (radiumLogLevel < 1) return;
+    std::set_text_attr(radiumLoggerNameColor);
+    std::rout(radiumLoggerNameSyntax);
+    std::set_text_attr(radiumLoggerErrorSeperatorColor);
+    std::rout(radiumLoggerErrorSeperatorSyntax);
+    std::set_text_attr(radiumLoggerErrorColor);
+    std::rout(radiumLoggerErrorSyntax);
+    std::set_text_attr(radiumLoggerErrorSeperatorColor);
+    std::rout(radiumLoggerErrorSeperatorSyntax);
+    std::set_text_attr(radiumLoggerErrorMessageColor);
+    std::rout(radiumLoggerErrorMessageStart);
+    std::rout(message);
+    std::rout(radiumLoggerErrorMessageEnd);
+    std::set_text_attr(7);
+    radiumLog += radiumLoggerNameSyntax + radiumLoggerErrorSeperatorSyntax +
+                 radiumLoggerErrorSyntax + radiumLoggerErrorSeperatorSyntax +
+                 radiumLoggerErrorMessageStart + message + radiumLoggerErrorMessageEnd;
+    return;
+}
+
+void radiumLogWarning(string message) {
+    if (radiumLogLevel < 2) return;
+    std::set_text_attr(radiumLoggerNameColor);
+    std::rout(radiumLoggerNameSyntax);
+    std::set_text_attr(radiumLoggerWarningSeperatorColor);
+    std::rout(radiumLoggerWarningSeperatorSyntax);
+    std::set_text_attr(radiumLoggerWarningColor);
+    std::rout(radiumLoggerWarningSyntax);
+    std::set_text_attr(radiumLoggerWarningSeperatorColor);
+    std::rout(radiumLoggerWarningSeperatorSyntax);
+    std::set_text_attr(radiumLoggerWarningMessageColor);
+    std::rout(radiumLoggerWarningMessageStart);
+    std::rout(message);
+    std::rout(radiumLoggerWarningMessageEnd);
+    std::set_text_attr(7);
+    radiumLog += radiumLoggerNameSyntax + radiumLoggerWarningSeperatorSyntax +
+                 radiumLoggerWarningSyntax + radiumLoggerWarningSeperatorSyntax +
+                 radiumLoggerWarningMessageStart + message + radiumLoggerWarningMessageEnd;
+    return;
+}
+
+void radiumLogInfo(string message) {
+    if (radiumLogLevel < 3) return;
+    std::set_text_attr(radiumLoggerNameColor);
+    std::rout(radiumLoggerNameSyntax);
+    std::set_text_attr(radiumLoggerInfoSeperatorColor);
+    std::rout(radiumLoggerInfoSeperatorSyntax);
+    std::set_text_attr(radiumLoggerInfoColor);
+    std::rout(radiumLoggerInfoSyntax);
+    std::set_text_attr(radiumLoggerInfoSeperatorColor);
+    std::rout(radiumLoggerInfoSeperatorSyntax);
+    std::set_text_attr(radiumLoggerInfoMessageColor);
+    std::rout(radiumLoggerInfoMessageStart);
+    std::rout(message);
+    std::rout(radiumLoggerInfoMessageEnd);
+    std::set_text_attr(7);
+    radiumLog += radiumLoggerNameSyntax + radiumLoggerInfoSeperatorSyntax +
+                 radiumLoggerInfoSyntax + radiumLoggerInfoSeperatorSyntax +
+                 radiumLoggerInfoMessageStart + message + radiumLoggerInfoMessageEnd;
+    return;
+}
+
+void radiumSetLogLevel(int level) {
+    radiumLogLevel = level;
+}
+
+void radiumGetLogLevel() {
+    return radiumLogLevel;
+}
+
+string radiumGetLog() {
+    return radiumLog;
+}
+
+string radiumReadFile(string path) {
+    return std::read(path);
+}
+
+int radiumCompileShader(string shaderSource, int shaderType) {
+    int shader = glCreateShader(shaderType);
+
+    glShaderSource(shader, 1, shaderSource);
+    glCompileShader(shader);
+ 
+    int compileStatus = glGetShaderiv(shader, GL_COMPILE_STATUS);
+ 
+    if (!((bool) compileStatus)) {
+        int length = glGetShaderiv(shader, GL_INFO_LOG_LENGTH);
+        string log = glGetShaderInfoLog(shader, length);
+
+        if (shaderType == GL_VERTEX_SHADER)
+            radiumLogError("vertex shader compilation error: \n" + log);
+
+        if (shaderType == GL_FRAGMENT_SHADER)
+            radiumLogError("fragment shader compilation error: \n" + log);
+
+        glDeleteShader(shader);
+        return 0;
+    }
+    
+    if (shaderType == GL_VERTEX_SHADER)
+        radiumLogInfo("vertex shader compiled successfully");
+
+    if (shaderType == GL_FRAGMENT_SHADER)
+        radiumLogInfo("fragment shader compiled successfully");
+            
+    return shader;
+}
+
+int radiumCreateProgram(string vertexShaderSource, string fragmentShaderSource) {
+    int vertexShader = radiumCompileShader(vertexShaderSource, GL_VERTEX_SHADER);
+    if (!((bool) vertexShader)) return 0;
+    int fragmentShader = radiumCompileShader(fragmentShaderSource, GL_FRAGMENT_SHADER);
+    if (!((bool) fragmentShader)) return 0;
+    int program = glCreateProgram();
+
+    if (!((bool) program)) {
+        radiumLogError("program creation error");
+        return 0;
+    }
+ 
+    glAttachShader(program, vertexShader);
+    glAttachShader(program, fragmentShader);
+    glLinkProgram(program);
+ 
+    int linkStatus = glGetProgramiv(program, GL_LINK_STATUS);
+
+    if (!((bool) linkStatus)) {
+        int length = glGetProgramiv(program, GL_INFO_LOG_LENGTH);
+        string log = glGetProgramInfoLog(program, length);
+        radiumLogError("program linking error: \n" + log);
+        glDetachShader(program, vertexShader);
+        glDetachShader(program, fragmentShader);
+        glDeleteProgram(program);
+        return 0;
+    } radiumLogInfo("program linked successfully");
+
+    return program;
+}
+
+bool radiumInit() {
+    if (!glfwInit()) {
+        radiumLogError("glfw failed to initialize");
+        radiumLogInfo("radium failed to initialize");
+        return false;
+    }
+
+    radiumLogInfo("glfw initialized successfully");
+    radiumLogInfo("opengl version: " + std::lower(glGetString(GL_VERSION)));
+    radiumLogInfo("radium initialized successfully");
+    return true;
+}
+
+bool radiumCreateWindow(int width, int height, string title, bool vsync) {
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    radiumWindowArray[0] = glfwCreateWindow(width, height, title);
+    radiumLogInfo("window created successfully");
+    glfwMakeContextCurrent(radiumWindowArray[0]);
+    glfwSwapInterval((int) vsync);
+    return true;
+}
+
+void radiumDestroyWindow() {
+    glfwDestroyWindow(radiumWindowArray[0]);
+    radiumLogInfo("window destroyed successfully");
+}
+
+void radiumTerminate() {
+    glfwTerminate();
+    radiumLogInfo("radium terminated successfully");
+}
+
+bool radiumWindowShouldClose() {
+    return glfwWindowShouldClose(radiumWindowArray[0]);
+}
+
+void radiumPollEvents() {
+    glfwPollEvents();
+}
+
+void radiumSwapBuffers() {
+    glfwSwapBuffers(radiumWindowArray[0]);
+}
+
+float[] radiumGetWindowSize() {
+    return {
+        (float) (_glfwGetWindowWidth(radiumWindowArray[0])),
+        (float) (_glfwGetWindowHeight(radiumWindowArray[0]))
+    };
+}
+
+int radiumGetGLFWWindow() {
+    return radiumWindowArray[0];
+}
+
+bool radiumGetKey(int key) {
+    return glfwGetKey(radiumGetGLFWWindow(), key);
+}
+
+int main() {
+    // radiumSetLogLevel(RADIUM_LOG_LEVEL_WARNING);
+
+    if (!radiumInit()) return 0;
+    rvr::RVRInit();
+    if (!radiumCreateWindow(1200, 600, "Radium", false)) return 0;
+
+    float nearClip = 0.1f, farClip = 100.0f;
+
+    rvr::RVRSetupStereoRenderTargets();
+    rvr::RVRInitControllers();
+    rvr::RVRInitEyes(nearClip, farClip);
+
+    ImGui::CreateContext();
+    int impl = ImGui::GlfwRenderer(radiumGetGLFWWindow());
+
+    glClearColor(0.02f, 0.02f, 0.02f, 1.0f);
+
+    float[] vertices = {
+        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f,
+         0.5f, -0.5f,  0.5f, 1.0f, 0.0f,
+         0.5f,  0.5f,  0.5f, 1.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f,
+         0.5f,  0.5f,  0.5f, 1.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f, 0.0f, 1.0f,
+         0.5f, -0.5f,  0.5f, 0.0f, 0.0f,
+         0.5f, -0.5f, -0.5f, 1.0f, 0.0f,
+         0.5f,  0.5f, -0.5f, 1.0f, 1.0f,
+         0.5f, -0.5f,  0.5f, 0.0f, 0.0f,
+         0.5f,  0.5f, -0.5f, 1.0f, 1.0f,
+         0.5f,  0.5f,  0.5f, 0.0f, 1.0f,
+         0.5f, -0.5f, -0.5f, 0.0f, 0.0f,
+        -0.5f, -0.5f, -0.5f, 1.0f, 0.0f,
+        -0.5f,  0.5f, -0.5f, 1.0f, 1.0f,
+         0.5f, -0.5f, -0.5f, 0.0f, 0.0f,
+        -0.5f,  0.5f, -0.5f, 1.0f, 1.0f,
+         0.5f,  0.5f, -0.5f, 0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f,
+        -0.5f, -0.5f,  0.5f, 1.0f, 0.0f,
+        -0.5f,  0.5f,  0.5f, 1.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f,
+        -0.5f,  0.5f,  0.5f, 1.0f, 1.0f,
+        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f, 0.0f, 0.0f,
+         0.5f,  0.5f,  0.5f, 1.0f, 0.0f,
+         0.5f,  0.5f, -0.5f, 1.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f, 0.0f, 0.0f,
+         0.5f,  0.5f, -0.5f, 1.0f, 1.0f,
+        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f,
+        -0.5f, -0.5f, -0.5f, 1.0f, 0.0f,
+         0.5f, -0.5f, -0.5f, 1.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f,
+         0.5f, -0.5f, -0.5f, 1.0f, 1.0f,
+         0.5f, -0.5f,  0.5f, 0.0f, 1.0f
+    };
+
+    int program = radiumCreateProgram(
+        radiumReadFile("../shaders/default.vert"),
+        radiumReadFile("../shaders/default.frag")
+    ); if (!((bool) program)) return 0;
+
+    int tex = glGenTextures(1);
+    glBindTexture(GL_TEXTURE_2D, tex);
+
+    int image = std::loadImage("C:\\Users\\yusuf\\Desktop\\RSX\\cube_texture.png");
+    int texture_data = std::getTextureData(image, "RGBA");
+    int[] texture_size = std::getTextureSize(image);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture_size[0], texture_size[1], 0, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
+ 
+    int vao = glGenVertexArrays(1);
+    glBindVertexArray(vao);
+
+    int vbo = glGenBuffers(1);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferFloatData(GL_ARRAY_BUFFER, vertices.length() * 4, vertices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, false, 5 * 4, 0 * 4);
+    glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, 2, GL_FLOAT, false, 5 * 4, 3 * 4);
+    glEnableVertexAttribArray(1);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+    float hue = 0.0f;
+    int color = ImGui::ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+    bool window_closed = false;
+    float yaw = 0.0f, pitch = 0.0f;
+    float[] pos = {0.0f, 0.0f, 0.0f};
+    float sensitivity = 100.0f;
+    float normal_speed = 0.02f;
+    float sprint_speed = 0.04f;
+    float speed = normal_speed;
+    int up = glm::vec3(0.0f, 1.0f, 0.0f);
+
+    float previousTime = glfwGetTime();
+    int frameCount = 0;
+
+    while (!(radiumGetKey(GLFW_KEY_LEFT_SHIFT)
+          && radiumGetKey(GLFW_KEY_Q)) && !radiumWindowShouldClose()) {
+        radiumPollEvents();
+        rvr::RVRPollEvents();
+        float[] size = radiumGetWindowSize();
+        float currentTime = glfwGetTime();
+        frameCount++;
+
+        if (currentTime - previousTime >= 1.0f) {
+            std::rout("FPS: " + (string) frameCount + std::endl());
+            frameCount = 0;
+            previousTime = currentTime;
+        }
+
+        /* glfwSetInputMode(radiumGetGLFWWindow(), GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+
+        float[] mouse_pos = glfwGetCursorPos(radiumGetGLFWWindow());
+        float x = mouse_pos[0], y = mouse_pos[1];
+
+        float x_offset = sensitivity * (float) (x - size[0] / 2) / size[0];
+        float y_offset = sensitivity * (float) (y - size[1] / 2) / size[1];
+
+        yaw += x_offset;
+        pitch -= y_offset;
+
+        if (pitch >= 89.9f)
+            pitch = 89.9f;
+
+        if (pitch <= -89.9f)
+            pitch = -89.9f;
+
+        int direction = glm::vec3(
+            std::cos(glm::radians(yaw)) * std::cos(glm::radians(pitch)),
+            std::sin(glm::radians(pitch)),
+            std::sin(glm::radians(yaw)) * std::cos(glm::radians(pitch))
+        ); int front = glm::normalize(direction);
+
+        glfwSetCursorPos(radiumGetGLFWWindow(), size[0] / 2, size[1] / 2);
+
+        if (radiumGetKey(GLFW_KEY_LEFT_CONTROL)) {
+            speed = sprint_speed;
+        } else {
+            speed = normal_speed;
+        } int speed_vec = glm::vec3(speed, speed, speed);
+
+        if (radiumGetKey(GLFW_KEY_W)) {
+            int position = glm::vec3(pos[0], pos[1], pos[2]);
+            pos = glm::value_ptr_float_arr(glm::add(position, glm::mul(speed_vec, front)));
+        }
+
+        if (radiumGetKey(GLFW_KEY_S)) {
+            int position = glm::vec3(pos[0], pos[1], pos[2]);
+            pos = glm::value_ptr_float_arr(glm::add(position, glm::mul(speed_vec, glm::neg(front))));
+        }
+
+        if (radiumGetKey(GLFW_KEY_D)) {
+            int position = glm::vec3(pos[0], pos[1], pos[2]);
+            pos = glm::value_ptr_float_arr(glm::add(position, glm::mul(speed_vec, glm::normalize(glm::cross(front, up)))));
+        }
+
+        if (radiumGetKey(GLFW_KEY_A)) {
+            int position = glm::vec3(pos[0], pos[1], pos[2]);
+            pos = glm::value_ptr_float_arr(glm::add(position, glm::mul(speed_vec, glm::neg(glm::normalize(glm::cross(front, up))))));
+        }
+
+        if (radiumGetKey(GLFW_KEY_SPACE)) {
+            int position = glm::vec3(pos[0], pos[1], pos[2]);
+            pos = glm::value_ptr_float_arr(glm::add(position, glm::mul(speed_vec, up)));
+        }
+
+        if (radiumGetKey(GLFW_KEY_LEFT_SHIFT)) {
+            int position = glm::vec3(pos[0], pos[1], pos[2]);
+            pos = glm::value_ptr_float_arr(glm::add(position, glm::mul(speed_vec, glm::neg(up))));
+        }
+        
+        int proj = glm::perspective(glm::radians(90.0f), size[0] / size[1], 0.1f, 100.0f);
+        int position = glm::vec3(pos[0], pos[1], pos[2]);
+        int view = glm::lookAt(position, glm::add(position, front), up);
+        
+        glUniformMatrix4fv(glGetUniformLocation(program, "matrix"), 1, false, glm::value_ptr(glm::mul(proj, view))); */
+
+        pos[0] -= glm::value_ptr_float_arr(rvr::RVRGetControllerJoystickPosition(rvr::RVRControllerLeft))[0] / 50;
+        pos[1] -= glm::value_ptr_float_arr(rvr::RVRGetControllerJoystickPosition(rvr::RVRControllerRight))[1] / 50;
+        pos[2] += glm::value_ptr_float_arr(rvr::RVRGetControllerJoystickPosition(rvr::RVRControllerLeft))[1] / 50;
+
+        for (int eye = 0; eye <= 1; eye += 1) {
+            rvr::RVRBeginRendering(eye);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            glUseProgram(program);
+            hue += 0.002f;
+            glUniform3fv(glGetUniformLocation(program, "color"), 1, std::hsv_to_rgb(hue, 1.0f, 1.0f));
+            int matrix = rvr::RVRGetCurrentViewProjectionMatrix(eye);
+            matrix = glm::translate(matrix, glm::vec3(pos[0], pos[1], pos[2]));
+            glUniformMatrix4fv(glGetUniformLocation(program, "matrix"), 1, false, glm::value_ptr(matrix));
+
+            glEnable(GL_DEPTH_TEST);
+            glBindVertexArray(vao);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glDrawArrays(GL_TRIANGLES, 0, (int) (vertices.length() / 5 * 3));
+            glBindTexture(GL_TEXTURE_2D, 0);
+            glBindVertexArray(0);
+            glUseProgram(0);
+            rvr::RVRRenderControllers();
+            rvr::RVREndRendering();
+        }
+
+        rvr::RVRSubmitFramebufferDescriptorsToCompositor();
+        radiumSwapBuffers();
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        rvr::RVRUpdateHMDPoseMatrix();
+
+        /* if (!window_closed) {
+            ImGui::ImplProcessInputs(impl);
+            ImGui::NewFrame();
+
+            if (ImGui::Begin("Window", true, ImGui::ImGuiWindowFlags_MenuBar)) {
+                if (ImGui::BeginMenuBar()) {
+                    if (ImGui::BeginMenu("File")) {
+                        if (ImGui::MenuItem("Exit", "Ctrl+Q")) { window_closed = true; }
+                        ImGui::EndMenu();
+                    } ImGui::EndMenuBar();
+                }
+
+                if (radiumGetKey(GLFW_KEY_LEFT_CONTROL) && radiumGetKey(GLFW_KEY_Q)) window_closed = true;
+
+                ImGui::ColorEdit4("Color", color);
+
+                float[100] samples;
+
+                for (int n = 0; n < 100; n++)
+                    samples[n] = std::sin(n * 0.2f + ImGui::GetTime() * 1.5f);
+
+                ImGui::PlotLines("Samples", samples, 100);
+
+                ImGui::TextColored(color, "Important Stuff");
+                ImGui::BeginChild("Scrolling");
+
+                for (int n = 0; n < 50; n++)
+                    ImGui::Text((string) n + ": Some text");
+
+                ImGui::EndChild();
+            } else {
+                window_closed = true;
+            }
+            
+            ImGui::End();
+            ImGui::EndFrame();
+            ImGui::Render();
+            ImGui::ImplRender(impl, ImGui::GetDrawData());
+        } radiumSwapBuffers(); */
+    }
+
+    rvr::RVRShutdown();
+    rvr::RVRDeleteFramebufferDescriptors();
+
+    glDeleteVertexArrays(1, vao);
+    glDeleteBuffers(1, vbo);
+    glDeleteProgram(program);
+
+    radiumDestroyWindow();
+    radiumTerminate();
+    return 0;
+}

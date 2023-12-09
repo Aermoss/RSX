@@ -1,23 +1,23 @@
 # R# - RSX
 An interpreted statically typed multi paradigm general purpose programming language designed for cross platform applications.
 
-# R# Logo
+# RSX Logo
 ![R# Logo](rsxpy/logo.png)
 
 # RSX Icon
-![RSX Icon](rsxpy/icon.png)
+![R# Icon](rsxpy/icon.png)
 
 # Requirements
 - Python 3.10 or higher
 
 # Getting Started
 ## How to install
-### Windows (Compiles RSX source files and places them in C:\RSX, also installs the RSX python library)
+### Windows (Compiles RSX source files and places them in C:\RSX, also installs the requirements and RSX python library)
 ```
 .\install.bat
 ```
 
-### Linux (Compiles RSX source files and installs the RSX python library)
+### Linux (Compiles RSX source files and installs the requirements and RSX python library)
 ```
 ./install.sh
 ```
@@ -310,3 +310,8 @@ Raid comes with RSX no need to install anything
 - rsxos
 - rsxsocket
 - rsxsdl2
+- rsxgl
+- rsglfw
+- rsxglm
+- rsxcolor
+- rsxrvr

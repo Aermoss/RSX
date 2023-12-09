@@ -1,0 +1,21 @@
+include "rsxglm/rsxglm.py" : *;
+include "rsxglm/rsxglm_globals.py" -> "rsxglm_globals";
+
+float[] value_ptr_float_arr(int addr) {
+    int arr_addr = glm::value_ptr(addr);
+    float[] arr = glm::rsxglm_globals::_get_var_float_arr(arr_addr);
+    glm::rsxglm_globals::_del_var(arr_addr);
+    return arr;
+}
+
+/* struct vec4 {
+    float x, y, z, w;
+};
+
+struct vec3 {
+    float x, y, z;
+};
+
+struct vec2 {
+    float x, y;
+}; */

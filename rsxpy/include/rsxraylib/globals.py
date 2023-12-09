@@ -16,10 +16,11 @@ def get_var(index):
     if index not in var_dict: error("unknown variable", "<rsxraylib>/globals.py")
     else: return var_dict[index]
 
+def del_var(index):
+    del var_dict[index]
+
 def add_var(var):
     index = get_unique_index()
     var_dict[index] = var
+    # add_scope_trigger(rsxlib.context(), del_var, [index])
     return index
-
-def del_var(index):
-    del var_dict[index]

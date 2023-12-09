@@ -1,0 +1,79 @@
+include "rsxio", "rsxraylib" : *;
+
+int hits;
+
+struct Vec2 {
+    float x, y;
+};
+
+struct Entity {
+    Vec2 position, speed, size;
+    int color;
+
+    Entity() {
+        std::rout("created" + std::endl());
+    }
+
+    ~Entity() {
+        std::rout("destroyed" + std::endl());
+    }
+
+    void init(float[] position_arr, float[] speed_arr, float[] size_arr, int init_color) {
+        position.x = position_arr[0], position.y = position_arr[1];
+        speed.x = speed_arr[0], speed.y = speed_arr[1];
+        size.x = size_arr[0], size.y = size_arr[1];
+        color = init_color;
+    }
+
+    void update() {
+        position.x += speed.x;
+        position.y += speed.y;
+
+        if (position.x >= 1200 - size.x || position.x < 0) {
+            speed.x *= -1;
+            hits++;
+        }
+
+        if (position.y >= 600 - size.y || position.y < 0) {
+            speed.y *= -1;
+            hits++;
+        }
+    }
+
+    void draw() {
+        DrawRectangle((int) position.x, (int) position.y, (int) size.x, (int) size.y, color);
+    }
+};
+
+void b(Entity aaa) {
+    aaa.color = PINK;
+}
+
+void a(Entity test) {
+    b(test);
+}
+
+int main() {
+    InitWindow(1200, 600, "RSX");
+
+    Entity entity;
+    entity.init({20.0f, 20.0f}, {0.1f, 0.1f}, {100.0f, 100.0f}, RED);
+    a(entity);
+    
+    Entity entity2;
+    entity2.init({200.0f, 200.0f}, {0.2f, 0.2f}, {100.0f, 100.0f}, GREEN);
+
+    while (!WindowShouldClose()) {
+        BeginDrawing();
+        ClearBackground(BLACK);
+        entity.update();
+        entity2.update();
+        entity.draw();
+        entity2.draw();
+        DrawText((string) hits, 10, 10, 50, RAYWHITE);
+        EndDrawing();
+    }
+
+    CloseWindow();
+    return 0;
+}

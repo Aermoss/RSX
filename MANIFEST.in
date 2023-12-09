@@ -1,8 +1,15 @@
 include rsxpy/*
 include rsxpy/raid/*
+include rsxpy/include/rsx-rvr/*
 include rsxpy/include/rsxbuild/*
+include rsxpy/include/rsxcolor/*
 include rsxpy/include/rsxf/*
+include rsxpy/include/rsxgl/*
+include rsxpy/include/rsxglfw/*
+include rsxpy/include/rsxglm/*
 include rsxpy/include/rsxgui/*
+include rsxpy/include/rsximg/*
+include rsxpy/include/rsximgui/*
 include rsxpy/include/rsxio/*
 include rsxpy/include/rsxmath/*
 include rsxpy/include/rsxmixer/*

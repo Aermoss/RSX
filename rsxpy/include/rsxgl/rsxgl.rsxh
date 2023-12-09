@@ -1,0 +1,116 @@
+include "rsxgl/rsxgl_globals.py" -> "rsxgl_globals";
+include "rsxgl/rsxgl.py" : *;
+
+void glBufferFloatData(int target, int size, float[] data, int usage) {
+    const int addr = rsxgl_globals::_add_var_float_arr(data);
+    glBufferData(target, size, addr, usage);
+    rsxgl_globals::_del_var(addr);
+}
+
+void glBufferIntData(int target, int size, int[] data, int usage) {
+    const int addr = rsxgl_globals::_add_var_int_arr(data);
+    glBufferData(target, size, addr, usage);
+    rsxgl_globals::_del_var(addr);
+}
+
+void glUniform1iv(int location, int count, int[] value) {
+    const int addr = rsxgl_globals::_add_var_int_arr(value);
+    _glUniform1iv(location, count, addr);
+    rsxgl_globals::_del_var(addr);
+}
+
+void glUniform2iv(int location, int count, int[] value) {
+    const int addr = rsxgl_globals::_add_var_int_arr(value);
+    _glUniform2iv(location, count, addr);
+    rsxgl_globals::_del_var(addr);
+}
+
+void glUniform3iv(int location, int count, int[] value) {
+    const int addr = rsxgl_globals::_add_var_int_arr(value);
+    _glUniform3iv(location, count, addr);
+    rsxgl_globals::_del_var(addr);
+}
+
+void glUniform4iv(int location, int count, int[] value) {
+    const int addr = rsxgl_globals::_add_var_int_arr(value);
+    _glUniform4iv(location, count, addr);
+    rsxgl_globals::_del_var(addr);
+}
+
+void glUniform1fv(int location, int count, float[] value) {
+    const int addr = rsxgl_globals::_add_var_float_arr(value);
+    glUniform1fv(location, count, addr);
+    rsxgl_globals::_del_var(addr);
+}
+
+void glUniform2fv(int location, int count, float[] value) {
+    const int addr = rsxgl_globals::_add_var_float_arr(value);
+    _glUniform2fv(location, count, addr);
+    rsxgl_globals::_del_var(addr);
+}
+
+void glUniform3fv(int location, int count, float[] value) {
+    const int addr = rsxgl_globals::_add_var_float_arr(value);
+    _glUniform3fv(location, count, addr);
+    rsxgl_globals::_del_var(addr);
+}
+
+void glUniform4fv(int location, int count, float[] value) {
+    const int addr = rsxgl_globals::_add_var_float_arr(value);
+    _glUniform4fv(location, count, addr);
+    rsxgl_globals::_del_var(addr);
+}
+
+/* void glUniformMatrix2fv(int location, int count, bool transpose, float[] value) {
+    const int addr = rsxgl_globals::_add_var_float_arr(value);
+    _glUniformMatrix2fv(location, count, transpose, addr);
+    rsxgl_globals::_del_var(addr);
+}
+
+void glUniformMatrix3fv(int location, int count, bool transpose, float[] value) {
+    const int addr = rsxgl_globals::_add_var_float_arr(value);
+    _glUniformMatrix3fv(location, count, transpose, addr);
+    rsxgl_globals::_del_var(addr);
+}
+
+void glUniformMatrix4fv(int location, int count, bool transpose, float[] value) {
+    const int addr = rsxgl_globals::_add_var_float_arr(value);
+    _glUniformMatrix4fv(location, count, transpose, addr);
+    rsxgl_globals::_del_var(addr);
+}
+
+void glUniformMatrix2x3fv(int location, int count, bool transpose, float[] value) {
+    const int addr = rsxgl_globals::_add_var_float_arr(value);
+    _glUniformMatrix2x3fv(location, count, transpose, addr);
+    rsxgl_globals::_del_var(addr);
+}
+
+void glUniformMatrix3x2fv(int location, int count, bool transpose, float[] value) {
+    const int addr = rsxgl_globals::_add_var_float_arr(value);
+    _glUniformMatrix3x2fv(location, count, transpose, addr);
+    rsxgl_globals::_del_var(addr);
+}
+
+void glUniformMatrix2x4fv(int location, int count, bool transpose, float[] value) {
+    const int addr = rsxgl_globals::_add_var_float_arr(value);
+    _glUniformMatrix2x4fv(location, count, transpose, addr);
+    rsxgl_globals::_del_var(addr);
+}
+
+void glUniformMatrix4x2fv(int location, int count, bool transpose, float[] value) {
+    const int addr = rsxgl_globals::_add_var_float_arr(value);
+    _glUniformMatrix4x2fv(location, count, transpose, addr);
+    rsxgl_globals::_del_var(addr);
+}
+
+void glUniformMatrix3x4fv(int location, int count, bool transpose, float[] value) {
+    const int addr = rsxgl_globals::_add_var_float_arr(value);
+    _glUniformMatrix3x4fv(location, count, transpose, addr);
+    rsxgl_globals::_del_var(addr);
+}
+
+void glUniformMatrix4x3fv(int location, int count, bool transpose, float[] value) {
+    const int addr = rsxgl_globals::_add_var_float_arr(value);
+    _glUniformMatrix4x3fv(location, count, transpose, addr);
+    rsxgl_globals::_del_var(addr);
+} */

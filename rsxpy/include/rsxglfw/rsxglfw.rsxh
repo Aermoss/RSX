@@ -1,0 +1,9 @@
+include "rsxglfw/rsxglfw.py" : *;
+
+int[] glfwGetWindowSize(int window) {
+    return {_glfwGetWindowWidth(window), _glfwGetWindowHeight(window)};
+}
+
+float[] glfwGetCursorPos(int window) {
+    return {_glfwGetCursorX(window), _glfwGetCursorY(window)};
+}

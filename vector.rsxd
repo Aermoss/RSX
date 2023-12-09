@@ -1,0 +1,46 @@
+include "rsxio" : *;
+
+namespace std {
+    template <T> struct vector {
+        T[0] data;
+
+        vector(T[] array) {
+            delete data;
+            int size = array.length();
+            T[size] data;
+
+            for (int i = 0; i < size; i++) {
+                data[i] = array[i];
+            }
+        }
+
+        void push_back(T value) {
+            int size = data.length();
+            T[size] temp = data;
+            delete data;
+            T[size + 1] data;
+            for (int i = 0; i < size; i++) {
+                data[i] = temp[i];
+            } data[size] = value;
+        }
+
+        int size() {
+            return data.length();
+        }
+
+        void operator[](int index, T value) {
+            data[index] = value;
+        }
+
+        T operator[](int index) {
+            return data[index];
+        }
+    };
+}
+
+int main() {
+    std::vector <int> vec;
+    vec.push_back(1);
+    std::rout(vec[0]);
+    return 0;
+}

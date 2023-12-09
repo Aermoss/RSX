@@ -21,8 +21,8 @@ class Module:
         self.functions = []
         self.ast = []
 
-    def include(self, name, namespace):
-        self.ast.append({"type": "include", "all": not namespace, "value": name})
+    def include(self, lib, namespace, special_namespace = None, names = None):
+        self.ast.append({"type": "include", "namespace": namespace, "libs": [lib], "special_namespace": special_namespace, "names": names})
 
     def get(self):
         tmp = self.ast.copy()
@@ -68,7 +68,7 @@ class ASTBuilder:
         else: self.parent.ast.append(ast)
 
     def call(self, name, args, get = False):
-        ast = {"type": "call", "name": name, "args": args}
+        ast = {"type": "call", "value": {"type": "IDENTIFIER", "value": name}, "args": args}
         if get: return ast
         else: self.parent.ast.append(ast)
 

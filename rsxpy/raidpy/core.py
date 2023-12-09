@@ -178,7 +178,7 @@ type for new command: [console/raylib/web_server] (example: console)
 
 def main():
     argv = sys.argv
-    version = "0.0.2"
+    version = tools.get_raid_version()
 
     include_folders = ["./", "../include"]
     if sys.platform == "win32" and tools.is_compiled(): include_folders.append("C:\\RSX\\include\\")
@@ -210,7 +210,7 @@ def main():
         config = configparser.ConfigParser()
         config["settings"] = {
             "project": argv[3],
-            "version": "0.0.1",
+            "version": version,
             "author": "unknown",
             "include_folders": ",".join(include_folders),
             "rsx-version": tools.get_version(),

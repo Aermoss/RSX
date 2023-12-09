@@ -1,0 +1,71 @@
+struct IntVec {
+    int[0] data;
+
+    void init(int[] array) {
+        delete data;
+        int size = array.length();
+        int[size] data;
+
+        for (int i = 0; i < size; i++) {
+            data[i] = array[i];
+        }
+    }
+
+    void push_back(int value) {
+        int size = data.length();
+        int[size] temp = data;
+        delete data;
+        int[size + 1] data;
+        for (int i = 0; i < size; i++) {
+            data[i] = temp[i];
+        } data[size] = value;
+    }
+
+    int length() {
+        return data.length();
+    }
+
+    void set(int index, int value) {
+        data[index] = value;
+    }
+
+    int get(int index) {
+        return data[index];
+    }
+};
+
+struct StringVec {
+    string[0] data;
+
+    void init(string[] array) {
+        delete data;
+        int size = array.length();
+        string[size] data;
+
+        for (int i = 0; i < size; i++) {
+            data[i] = array[i];
+        }
+    }
+
+    void push_back(string value) {
+        int size = data.length();
+        string[size] temp = data;
+        delete data;
+        string[size + 1] data;
+        for (int i = 0; i < size; i++) {
+            data[i] = temp[i];
+        } data[size] = value;
+    }
+
+    int length() {
+        return data.length();
+    }
+
+    void set(int index, string value) {
+        data[index] = value;
+    }
+
+    string get(int index) {
+        return data[index];
+    }
+};

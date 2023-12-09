@@ -7,6 +7,7 @@ int functions_two() {
 }
 
 float functions_three() {
+    string a = (string) 1;
     return 20.23f;
 }
 

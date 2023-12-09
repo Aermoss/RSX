@@ -1,0 +1,6 @@
+include "rsximg/rsximg_globals.py" : *;
+include "rsximg/rsximg.py" : *;
+
+int[] getTextureSize(int addr) {
+    return {std::_getTextureWidth(addr), std::_getTextureHeight(addr)};
+}

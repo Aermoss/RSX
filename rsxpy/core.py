@@ -1,5 +1,5 @@
 import sys, os, time
-import platform
+import platform, traceback
 
 # from numba import njit, jit
 # from numba.core import types
@@ -27,12 +27,24 @@ except ImportError:
     import rsxpy.builder as builder
 
 keywords = {
+    "struct": "STRUCT",
+    # "class": "CLASS",
+    # "public": "PUBLIC",
+    # "private": "PRIVATE",
+    # "protected": "PROTECTED",
+    # "try": "TRY",
+    # "throw": "THROW",
+    # "catch": "CATCH",
+    # "finally": "FINALLY",
+    # "new": "NEW",
     "auto": "AUTO",
     "void": "VOID",
     "bool": "BOOL",
     "int": "INT",
     "float": "FLOAT",
     "string": "STRING",
+    "char": "CHAR",
+    "double": "DOUBLE",
     "return": "RETURN",
     "false": "FALSE",
     "true": "TRUE",
@@ -44,17 +56,8 @@ keywords = {
     "switch": "SWITCH",
     "case": "CASE",
     "default": "DEFAULT",
-    # "class": "CLASS",
-    # "public": "PUBLIC",
-    # "private": "PRIVATE",
-    # "protected": "PROTECTED",
-    # "try": "TRY",
-    # "throw": "THROW",
-    # "catch": "CATCH",
     "const": "CONST",
     "using": "USING",
-    # "struct": "STRUCT",
-    # "new": "NEW",
     "delete": "DELETE",
     "do": "DO",
     "namespace": "NAMESPACE",
@@ -63,12 +66,12 @@ keywords = {
     "include": "INCLUDE"
 }
 
-constants = {
+constant_types = {
     "true": "BOOL",
     "false": "BOOL"
 }
 
-operators = {
+symbols = {
     ";": "SEMICOLON",
     ":": "COLON",
     "(": "LPAREN",
@@ -148,7 +151,7 @@ def lexer(data, file):
 
     def append(value):
         row, col = get_row_col()
-        tokens.append({"value": value, "row": row, "col": col})
+        tokens.append({"value": value, "row": row, "col": col - 1})
 
     last_char = ""
 
@@ -167,8 +170,8 @@ def lexer(data, file):
                 char = get(pos)
 
             if id_str in keywords:
-                if id_str in constants:
-                    append(constants[id_str])
+                if id_str in constant_types:
+                    append(constant_types[id_str])
 
                 append(keywords[id_str])
 
@@ -198,11 +201,9 @@ def lexer(data, file):
             if base == "decimal":
                 if num_str.count(".") == 1:
                     if num_str[-1:] == ".": num_str += "0"
-                    append("FLOAT")
-
-                    if num_str.count("f") not in [0, 1]:
-                        error("more than one 'f' found in a float")
-
+                    if num_str.count("f") == 0: append("DOUBLE")
+                    elif num_str.count("f") == 1: append("FLOAT")
+                    else: error("more than one 'f' found in a float")
                     num_str = num_str.replace("f", "")
 
                 elif num_str.count(".") == 0:
@@ -224,13 +225,22 @@ def lexer(data, file):
             else:
                 error("unknown number system")
 
-        elif char in ["\"", "'"]:
-            op = char
+        elif char == "\'":
+            if get(pos + 2) == char:
+                append("CHAR")
+                append(get(pos + 1))
+                pos += 3
+                char = get(pos)
+
+            else:
+                error("invalid syntax for char")
+
+        elif char == "\"":
             pos += 1
             char = get(pos)
             string = ""
 
-            while char and char != op:
+            while char and char != "\"":
                 if char in "\r\n":
                     error("unterminated string literal")
 
@@ -239,8 +249,13 @@ def lexer(data, file):
                     pos += 2
                     char = get(pos)
 
-                if char == "\\" and get(pos + 1) == "\'":
+                elif char == "\\" and get(pos + 1) == "\'":
                     string += "\'"
+                    pos += 2
+                    char = get(pos)
+                
+                elif char == "\\" and get(pos + 1) == "0":
+                    string += "\0"
                     pos += 2
                     char = get(pos)
 
@@ -297,13 +312,13 @@ def lexer(data, file):
                     char = get(pos)
 
                 else:
-                    append(operators[char])
+                    append(symbols[char])
                     pos += 1
                     char = get(pos)
 
-            elif char in operators:
+            elif char in symbols:
                 if tokens[len(tokens) - 1]["value"] in ["GREATER", "LESS", "NOT", "EQUALS", "PLUS", "MINUS", "ASTERISK", "SLASH", "MODULUS"] and char == "=" and last_char != " ":
-                    append(tokens[len(tokens) - 1]["value"] + operators[char])
+                    append(tokens[len(tokens) - 1]["value"] + symbols[char])
                     tokens.pop(len(tokens) - 2)
 
                 elif tokens[len(tokens) - 1]["value"] == "MINUS" and char == ">" and last_char != " ":
@@ -315,16 +330,19 @@ def lexer(data, file):
                     elif char == ">": append("BITWISERIGHT")
                     tokens.pop(len(tokens) - 2)
 
-                elif char == last_char == "|":
+                elif char == "|" and get(pos + 1) == "|":
                     append("OR")
-                    tokens.pop(len(tokens) - 2)
+                    pos += 1
 
                 elif char == "|":
                     append("BITWISEOR")
 
-                elif char == last_char == "&":
+                elif char == "&" and get(pos + 1) == "&":
                     append("AND")
-                    tokens.pop(len(tokens) - 2)
+                    pos += 1
+                
+                elif char == "&" and get(pos + 1) != " ":
+                    append("ADDROF")
 
                 elif char == "&":
                     append("BITWISEAND")
@@ -347,11 +365,11 @@ def lexer(data, file):
                     append(char.replace("+", "PREINCREMENT").replace("-", "PREDECREMENT"))
                     pos += 1
 
-                elif char in ["-", "+"] and get(pos + 1) not in [" ", char] + list(operators.keys()):
+                elif char in ["-", "+"] and (get(pos + 1) not in [" ", char, "\"", "\'", "\n"] + list(symbols.keys())):
                     append(char.replace("-", "NEGATIVE").replace("+", "POSITIVE"))
 
                 else:
-                    append(operators[char])
+                    append(symbols[char])
 
                 pos += 1
                 char = get(pos)
@@ -367,18 +385,20 @@ def lexer(data, file):
     
     return tokens
 
-def parser(tokens, file):
+def parser(tokens, file, custom_types = []):
     ast = []
     pos = 0
 
-    last_token = {"token": None, "value": None}
+    last_token = {"token": None, "pos": None, "value": None}
 
-    types = ["BOOL", "INT", "FLOAT", "STRING"]
+    types = ["BOOL", "INT", "FLOAT", "STRING", "CHAR", "DOUBLE"]
     operators = ["PLUS", "MINUS", "SLASH", "ASTERISK", "MODULUS", "EQUALS" * 2, "NOT" + "EQUALS", "GREATER", "GREATER" + "EQUALS", "LESS", "LESS" + "EQUALS", "AND", "OR", "NOT", "BITWISEOR", "BITWISEXOR", "BITWISEAND", "BITWISENOT", "BITWISELEFT", "BITWISERIGHT"]
     assignment_operators = ["EQUALS", "PLUS" + "EQUALS", "MINUS" + "EQUALS", "ASTERISK" + "EQUALS", "SLASH" + "EQUALS", "MODULUS" + "EQUALS", "BITWISEOR" + "EQUALS", "BITWISEXOR" + "EQUALS", "BITWISEAND" + "EQUALS", "BITWISELEFT" + "EQUALS", "BITWISERIGHT" + "EQUALS"]
 
     def error(message = None, file = file, type = "error", terminated = False):
         row, col = None, None
+
+        print(len(tokens), pos)
 
         if isinstance(tokens[pos], str):
             print(f"{file}:<{tokens[pos]}>:", end = " ", flush = True)
@@ -470,7 +490,7 @@ def parser(tokens, file):
                 if ignore_curly == 0 and ignore == 0:
                     if len(temp_tokens) != 0:
                         temp_tokens.append({"value": "SEMICOLON", "row": 0, "col": 0})
-                        args.append(parser(temp_tokens, file)[0])
+                        args.append(parser(temp_tokens, file, custom_types)[0])
                         temp_tokens.clear()
 
                     break
@@ -517,7 +537,7 @@ def parser(tokens, file):
 
                 if ignore == 0:
                     if arg_name != None and arg_type != None:
-                        if arg_type == "ARRAY":
+                        if arg_type == "ARRAY_T":
                             args[arg_name] = {"type": arg_type, "array_type": arg_array_type, "size": arg_size}
                             arg_array_type, arg_size = None, None
                             
@@ -539,13 +559,20 @@ def parser(tokens, file):
                     temp_size, current_pos = get_index(current_pos + 2)
                     if temp_size["type"] != "NULL": arg_size = temp_size
                     arg_array_type = arg_type
-                    arg_type = "ARRAY"
+                    arg_type = "ARRAY_T"
 
                 else:
                     current_pos += 1
 
             elif get(current_pos) == "IDENTIFIER":
-                arg_name = get(current_pos + 1)
+                if get(current_pos + 1) in custom_types:
+                    arg_type = {"type": "STRUCT_T", "value": get(current_pos + 1)}
+                    arg_array_type = None
+                    arg_size = None
+                
+                else:
+                    arg_name = get(current_pos + 1)
+
                 current_pos += 2
 
             elif get(current_pos) == "THREEDOT":
@@ -554,7 +581,7 @@ def parser(tokens, file):
 
             elif get(current_pos) == "COMMA":
                 if arg_name != None and arg_type != None:
-                    if arg_type == "ARRAY":
+                    if arg_type == "ARRAY_T":
                         args[arg_name] = {"type": arg_type, "array_type": arg_array_type, "size": arg_size}
                         arg_array_type, arg_size = None, None
                         
@@ -603,7 +630,7 @@ def parser(tokens, file):
                     temp_tokens.append(get(current_pos, True))
                     current_pos += 1
 
-        return parser(temp_tokens, file), current_pos + 1
+        return parser(temp_tokens, file, custom_types), current_pos + 1
 
     def get_index(temp_pos):
         temp_tokens = []
@@ -628,7 +655,7 @@ def parser(tokens, file):
         temp_tokens.append("SEMICOLON")
 
         if get(temp_pos) == "RBRACKET":
-            index = parser(temp_tokens, file)[0]
+            index = parser(temp_tokens, file, custom_types)[0]
             temp_pos += 1
 
         return index, temp_pos
@@ -697,7 +724,7 @@ def parser(tokens, file):
     def factor(temp_pos, result = None):
         if result != None: return result, temp_pos
         temp_tokens, temp_pos = collect_tokens(temp_pos)
-        result = parser(temp_tokens, file)[0]
+        result = parser(temp_tokens, file, custom_types)[0]
         return result, temp_pos
 
     def term(temp_pos, result = None):
@@ -723,8 +750,8 @@ def parser(tokens, file):
         return result, temp_pos
 
     while len(tokens) > pos:
-        if last_token["token"] == None or get(pos) != last_token["token"]:
-            last_token = {"token": get(pos), "value": 0}
+        if last_token["token"] == None or get(pos) != last_token["token"] or last_token["pos"] != pos:
+            last_token = {"token": get(pos), "pos": pos, "value": 0}
 
         elif get(pos) == last_token["token"]: last_token["value"] += 1
         if last_token["value"] >= 1000: error()
@@ -739,29 +766,56 @@ def parser(tokens, file):
                         error("invalid character", suggest = False)
 
                     ast.append({"type": "namespace", "name": name, "ast": temp_ast})
+
+        elif get(pos) == "STRUCT":
+            if get(pos + 1) == "IDENTIFIER":
+                name = get(pos + 2)
+                custom_types.append(name)
+                tmp_ast, pos = get_func_ast(pos + 3)
+                
+                for i in tmp_ast:
+                    if i["type"] not in ["var", "func", "constructor", "destructor"]:
+                        print(i)
+                        tools.error("invalid usage of struct: '" + name + "'", file)
+
+                if get(pos) == "SEMICOLON":
+                    ast.append({"type": "struct", "name": name, "ast": tmp_ast})
                     pos += 1
+
+                else:
+                    tools.error(f"expected ';' At the end of the definition of the '{name}' structure", file)
 
         elif get(pos) == "NOT":
             temp_tokens, pos = collect_tokens(pos + 1)
-            ast.append({"type": "not", "value": parser(temp_tokens, file)[0]})
+            ast.append({"type": "not", "value": parser(temp_tokens, file, custom_types)[0]})
+            if get(pos) == "SEMICOLON": pos += 1
+
+        elif get(pos) == "ADDROF":
+            temp_tokens, pos = collect_tokens(pos + 1)
+            ast.append({"type": "addrof", "value": parser(temp_tokens, file, custom_types)[0]})
             if get(pos) == "SEMICOLON": pos += 1
 
         elif get(pos) in ["NEGATIVE", "POSITIVE"]:
             type = get(pos)
             temp_tokens, pos = collect_tokens(pos + 1)
-            ast.append({"type": type.replace("NEGATIVE", "neg").replace("POSITIVE", "pos"), "value": parser(temp_tokens, file)[0]})
+            ast.append({"type": type.replace("NEGATIVE", "neg").replace("POSITIVE", "pos"), "value": parser(temp_tokens, file, custom_types)[0]})
             if get(pos) == "SEMICOLON": pos += 1
 
         elif get(pos) in ["PREINCREMENT", "PREDECREMENT"]:
             type = get(pos)
             temp_tokens, pos = collect_tokens(pos + 1)
-            ast.append({"type": type.replace("PREINCREMENT", "increment").replace("PREDECREMENT", "decrement"), "value": parser(temp_tokens, file)[0], "pre": True})
+            ast.append({"type": type.replace("PREINCREMENT", "increment").replace("PREDECREMENT", "decrement"), "value": parser(temp_tokens, file, custom_types)[0], "pre": True})
             if get(pos) == "SEMICOLON": pos += 1
 
         elif get(pos) == "BITWISENOT":
-            temp_tokens, pos = collect_tokens(pos + 1)
-            ast.append({"type": "bitwise not", "value": parser(temp_tokens, file)[0]})
-            if get(pos) == "SEMICOLON": pos += 1
+            if get(pos + 1) == "IDENTIFIER" and get(pos + 2).split("::")[len(get(pos + 2).split("::")) - 1] in custom_types:
+                tokens[pos + 2] = "~" + get(pos + 2)
+                pos += 1
+
+            else:
+                temp_tokens, pos = collect_tokens(pos + 1)
+                ast.append({"type": "bitwise not", "value": parser(temp_tokens, file, custom_types)[0]})
+                if get(pos) == "SEMICOLON": pos += 1
 
         elif get(pos) == "FOR":
             if get(pos + 1) == "LPAREN":
@@ -804,7 +858,7 @@ def parser(tokens, file):
 
                 temp_ast, pos = get_func_ast(temp_pos + 1)
                 temp_tokens[1].append({"value": "SEMICOLON", "row": 0, "col": 0})
-                ast.append({"type": "for", "ast": temp_ast, "init": parser(temp_tokens[0], file), "condition": parser(temp_tokens[1], file)[0], "update": parser(temp_tokens[2], file)})
+                ast.append({"type": "for", "ast": temp_ast, "init": parser(temp_tokens[0], file, custom_types), "condition": parser(temp_tokens[1], file, custom_types)[0], "update": parser(temp_tokens[2], file, custom_types)})
 
         elif get(pos) in ["IF", "ELSE", "WHILE"]:
             first_pos = pos
@@ -857,7 +911,7 @@ def parser(tokens, file):
 
             if (get(first_pos) in ["IF", "WHILE"]) or (get(first_pos) == "ELSE" and get(first_pos + 1) == "IF"):
                 condition_tokens.append("SEMICOLON")
-                ast.append({"type": name, "ast": temp_ast, "condition": parser(condition_tokens, file)[0]})
+                ast.append({"type": name, "ast": temp_ast, "condition": parser(condition_tokens, file, custom_types)[0]})
 
             else:
                 ast.append({"type": name, "ast": temp_ast})
@@ -873,14 +927,14 @@ def parser(tokens, file):
             left = ast[len(ast) - 1]
             ast.pop(len(ast) - 1)
             temp_tokens, pos = collect_tokens(pos + 1, stop_tokens = ["OR", "AND", "SEMICOLON", "RPAREN"])
-            ast.append({"type": "or", "left": left, "right": parser(temp_tokens, file)[0]})
+            ast.append({"type": "or", "left": left, "right": parser(temp_tokens, file, custom_types)[0]})
             if get(pos) == "SEMICOLON": pos += 1
 
         elif get(pos) == "AND":
             left = ast[len(ast) - 1]
             ast.pop(len(ast) - 1)
             temp_tokens, pos = collect_tokens(pos + 1, stop_tokens = ["OR", "AND", "SEMICOLON", "RPAREN"])
-            ast.append({"type": "and", "left": left, "right": parser(temp_tokens, file)[0]})
+            ast.append({"type": "and", "left": left, "right": parser(temp_tokens, file, custom_types)[0]})
             if get(pos) == "SEMICOLON": pos += 1
 
         elif get(pos) == "DO":
@@ -918,7 +972,7 @@ def parser(tokens, file):
 
                 pos = condition_pos + 1
                 condition_tokens.append({"value": "SEMICOLON", "row": 0, "col": 0})
-                ast.append({"type": "do while", "ast": temp_ast, "condition": parser(condition_tokens, file)[0]})
+                ast.append({"type": "do while", "ast": temp_ast, "condition": parser(condition_tokens, file, custom_types)[0]})
 
                 if get(pos) == "SEMICOLON":
                     pos += 1
@@ -957,7 +1011,7 @@ def parser(tokens, file):
 
                 while True:
                     temp_tokens, pos = collect_tokens(pos, stop_tokens = ["RCURLYBRACKET", "SEMICOLON"])
-                    if len(temp_tokens) != 1: values.append(parser(temp_tokens, file)[0])
+                    if len(temp_tokens) != 1: values.append(parser(temp_tokens, file, custom_types)[0])
 
                     if get(pos) == "COMMA":
                         pos += 1
@@ -971,7 +1025,7 @@ def parser(tokens, file):
                     if get(pos) == "SEMICOLON":
                         pos += 1
 
-                ast.append({"type": "ARRAY", "array_type": None, "size": None, "value": values})
+                ast.append({"type": "INITLIST", "value": values})
 
             else:
                 temp_ast, pos = get_func_ast(pos)
@@ -1026,7 +1080,7 @@ def parser(tokens, file):
                         pos += 1
 
                     elif get(pos) in ["CASE", "DEFAULT"]:
-                        if current_case != None: cases[current_case]["ast"] = parser(cases[current_case]["ast"], file)
+                        if current_case != None: cases[current_case]["ast"] = parser(cases[current_case]["ast"], file, custom_types)
                         current_case = len(cases)
                         if get(pos) == "DEFAULT": current_case = "default"
                         cases[current_case] = {"ast": [], "value": []}
@@ -1051,7 +1105,7 @@ def parser(tokens, file):
 
                         if "value" in cases[current_case]:
                             cases[current_case]["value"].append({"value": "SEMICOLON", "row": 0, "col": 0})
-                            cases[current_case]["value"] = parser(cases[current_case]["value"], file)[0]
+                            cases[current_case]["value"] = parser(cases[current_case]["value"], file, custom_types)[0]
                             pos += 1
 
                     else:
@@ -1059,13 +1113,13 @@ def parser(tokens, file):
                         cases[current_case]["ast"].append(get(pos, True))
                         pos += 1
 
-                if current_case != None: cases[current_case]["ast"] = parser(cases[current_case]["ast"], file)
+                if current_case != None: cases[current_case]["ast"] = parser(cases[current_case]["ast"], file, custom_types)
 
                 if get(pos) == "RCURLYBRACKET":
                     ast.append({"type": "switch", "value": value, "cases": cases})
                     pos += 1
 
-        elif get(pos) == "LPAREN" and get(pos + 1) in ["STRING", "BOOL", "INT", "FLOAT"] and get(pos + 2) == "RPAREN":
+        elif get(pos) == "LPAREN" and get(pos + 1) in types and get(pos + 2) == "RPAREN":
             temp_tokens = []
             type = get(pos + 1)
             pos += 3
@@ -1113,7 +1167,7 @@ def parser(tokens, file):
                     pos += 1
 
             temp_tokens.append({"value": "SEMICOLON", "row": 0, "col": 0})
-            ast.append({"type": "cast", "cast_type": type, "value": parser(temp_tokens, file)[0]})
+            ast.append({"type": "cast", "cast_type": type, "value": parser(temp_tokens, file, custom_types)[0]})
 
         elif get(pos) in ["PLUS", "MINUS", "SLASH", "ASTERISK", "MODULUS", "BITWISEOR", "BITWISEXOR", "BITWISEAND", "BITWISELEFT", "BITWISERIGHT"]:
             result, pos = expr(pos, ast[len(ast) - 1])
@@ -1137,7 +1191,7 @@ def parser(tokens, file):
                     pos += 1
 
             temp_tokens.append({"value": "SEMICOLON", "row": 0, "col": 0})
-            ast.append({"type": type, "left": ast[len(ast) - 1], "right": parser(temp_tokens, file)[0]})
+            ast.append({"type": type, "left": ast[len(ast) - 1], "right": parser(temp_tokens, file, custom_types)[0]})
             ast.pop(len(ast) - 2)
 
             if get(pos) == "SEMICOLON":
@@ -1158,7 +1212,7 @@ def parser(tokens, file):
                     pos += 1
 
             if get(pos) == "SEMICOLON":
-                ast.append({"type": "return", "value": parser(temp_tokens, file)[0]})
+                ast.append({"type": "return", "value": parser(temp_tokens, file, custom_types)[0]})
                 pos += 1
 
         elif get(pos) == "DELETE":
@@ -1214,12 +1268,12 @@ def parser(tokens, file):
                 ast.append({"type": get(pos).lower()})
                 pos += 2
 
-        elif get(pos) == "IDENTIFIER":
+        elif get(pos) == "IDENTIFIER" and get(pos + 1).split("::")[len(get(pos + 1).split()) - 1].replace("~", "") not in custom_types:
             if get(pos + 2) in assignment_operators:
                 type = get(pos + 2)
                 name = get(pos + 1)
                 temp_tokens, pos = collect_tokens(pos + 3, stop_tokens = ["SEMICOLON"])
-                value = parser(temp_tokens, file)[0]
+                value = parser(temp_tokens, file, custom_types)[0]
                 cur = {"type": "IDENTIFIER", "value": name}
 
                 if type == "PLUS" + "EQUALS": value = {"type": "add", "left": cur, "right": value}
@@ -1264,7 +1318,7 @@ def parser(tokens, file):
             if get(pos) in assignment_operators:
                 type = get(pos)
                 temp_tokens, pos = collect_tokens(pos + 1, stop_tokens = ["SEMICOLON"])
-                value = parser(temp_tokens, file)[0]
+                value = parser(temp_tokens, file, custom_types)[0]
                 last = {"type": "get", "target": ast[len(ast) - 1], "index": index}
 
                 if type == "PLUS" + "EQUALS": value = {"type": "add", "left": last, "right": value}
@@ -1342,13 +1396,13 @@ def parser(tokens, file):
                         pos += 1
 
                 temp_tokens.append("SEMICOLON")
-                ast.append(parser(temp_tokens, file)[0])
+                ast.append(parser(temp_tokens, file, custom_types)[0])
                 pos += 1
                 
                 if get(pos) == "SEMICOLON":
                     pos += 1
 
-        elif get(pos) in ["VOID", "AUTO", "CONST"] + types:
+        elif (get(pos) in ["VOID", "AUTO", "CONST"] + types) or (get(pos) == "IDENTIFIER" and get(pos + 1).split("::")[len(get(pos + 1).split("::")) - 1].replace("~", "") in custom_types):
             if get(pos) in types and get(pos + 2) in ["SEMICOLON", "COMMA", "LPAREN", "RPAREN"] + operators and get(pos + 1) not in ["LBRACKET"]:
                 ast.append({"type": get(pos), "value": get(pos + 1)})
                 if get(pos + 2) == "SEMICOLON": pos += 3
@@ -1362,9 +1416,13 @@ def parser(tokens, file):
                     const = True
                     pos += 1
 
-                if get(pos) in ["VOID", "AUTO"] + types:
-                    type = get(pos)
-                    size, array_type = None, None
+                if (get(pos) in ["VOID", "AUTO"] + types) or (get(pos) == "IDENTIFIER" and get(pos + 1).split("::")[len(get(pos + 1).split()) - 1].replace("~", "") in custom_types):
+                    if get(pos) == "IDENTIFIER":
+                        type = {"type": "STRUCT_T", "value": get(pos + 1)}
+                        pos += 1
+
+                    else:
+                        type = get(pos)
 
                     if get(pos + 1) not in ["IDENTIFIER", "LPAREN", "COMMA", "LBRACKET"]:
                         if type in ["VOID", "AUTO"]: error("can't use void type like this")
@@ -1376,9 +1434,9 @@ def parser(tokens, file):
                         if get(pos + 1) == "LBRACKET":
                             if type in ["VOID", "AUTO"]: error("can't use void type like this")
                             temp_size, pos = get_index(pos + 2)
+                            size = None
                             if temp_size["type"] != "NULL": size = temp_size
-                            array_type = type
-                            type = "ARRAY"
+                            type = {"type": "ARRAY_T", "array_type": type, "size": size}
 
                         else:
                             pos += 1
@@ -1390,21 +1448,19 @@ def parser(tokens, file):
 
                             if get(pos + 2) == "LPAREN":
                                 args, pos, var_arg = get_def_args(pos + 2)
+                                if "type" in type and type["size"] != None: error("size must be none")
+                                temp_ast = {}
 
-                                if size != None: error("size must be none")
 
-                                if get(pos) == "SEMICOLON":
-                                    ast.append({"type": "func", "return_type": type, "array_type": array_type, "const": const, "name": name, "args": args, "ast": None, "var_arg": var_arg})
-                                    pos += 1
+                                if get(pos) != "SEMICOLON": temp_ast, pos = get_func_ast(pos)
+                                else: pos += 1
 
-                                else:
-                                    temp_ast, pos = get_func_ast(pos)
-                                    ast.append({"type": "func", "return_type": type, "array_type": array_type, "const": const, "name": name, "args": args, "ast": temp_ast, "var_arg": var_arg})
+                                ast.append({"type": "func", "return_type": type, "const": const, "name": name, "args": args, "ast": temp_ast, "var_arg": var_arg})
 
                             elif get(pos + 2) == "EQUALS":
                                 if type in ["VOID"]: error("can't use void type like this")
                                 temp_tokens, pos = collect_tokens(pos + 3, stop_tokens = ["SEMICOLON"])
-                                ast.append({"type": "var", "value_type": type, "array_type": array_type, "size": size, "name": name, "value": parser(temp_tokens, file)[0], "const": const})
+                                ast.append({"type": "var", "value_type": type, "name": name, "value": parser(temp_tokens, file, custom_types)[0], "const": const})
                                 
                                 if get(pos) in ["SEMICOLON", "COMMA"]:
                                     if get(pos) == "COMMA":
@@ -1425,11 +1481,24 @@ def parser(tokens, file):
                                 else:
                                     pos += 2
 
-                                ast.append({"type": "var", "value_type": type, "array_type": array_type, "size": size, "name": name, "value": None, "const": const})
+                                ast.append({"type": "var", "value_type": type, "name": name, "value": None, "const": const})
                                 if get(pos) == "SEMICOLON": pos += 1
 
                             else:
                                 error("expected ';'")
+
+                        elif get(pos) == "LPAREN":
+                            if type["type"] == "STRUCT_T":
+                                args, pos, var_arg = get_def_args(pos)
+                                temp_ast = {}
+
+                                if get(pos) != "SEMICOLON":
+                                    temp_ast, pos = get_func_ast(pos)
+                                else: pos += 1
+
+                                print("destructor" if type["value"][0] == "~" else "constructor")
+
+                                ast.append({"type": "destructor" if type["value"][0] == "~" else "constructor", "args": args, "ast": temp_ast})
                 
                 else:
                     error("expected type")
@@ -1452,12 +1521,12 @@ class Context:
             "global": {
                 "system": std.std["system"],
                 "__file__": {"type": "var", "value": {"type": "STRING", "value": file}, "const": True},
-                "__OSNAME__": {"type": "var", "value": {"type": "STRING", "value": os.name}, "const": True},
-                "__MACHINE__": {"type": "var", "value": {"type": "STRING", "value": platform.machine()}, "const": True},
-                "__SYSTEM__": {"type": "var", "value": {"type": "STRING", "value": platform.system()}, "const": True},
-                "__ARCH__": {"type": "var", "value": {"type": "STRING", "value": platform.architecture()[0]}, "const": True},
-                "__PLATFORM__": {"type": "var", "value": {"type": "STRING", "value": sys.platform}, "const": True},
-                "__NODE__": {"type": "var", "value": {"type": "STRING", "value": platform.node()}, "const": True}
+                "__osname__": {"type": "var", "value": {"type": "STRING", "value": os.name}, "const": True},
+                "__machine__": {"type": "var", "value": {"type": "STRING", "value": platform.machine()}, "const": True},
+                "__system__": {"type": "var", "value": {"type": "STRING", "value": platform.system()}, "const": True},
+                "__arch__": {"type": "var", "value": {"type": "STRING", "value": platform.architecture()[0]}, "const": True},
+                "__platform__": {"type": "var", "value": {"type": "STRING", "value": sys.platform}, "const": True},
+                "__node__": {"type": "var", "value": {"type": "STRING", "value": platform.node()}, "const": True}
             }
         }
         self.args = []
@@ -1470,7 +1539,6 @@ class Context:
         self.current_array_type = None
         self.cache = {}
         self.include_cache = {}
-        self.recorded = {}
         self.program_state_var = True
         self.is_thread = False
         self.actual_context = None
@@ -1478,9 +1546,21 @@ class Context:
         self.parent_scopes = []
         self.recursions = {}
         self.recursion_limit = 1000
+        self.return_state = False
+        self.custom_types = []
+        self.pass_scope_check = False
+        self.namespaces = []
 
     def update(self):
-        ...
+        self.return_state = False
+
+    def get_unique_name(self):
+        value = 0
+
+        while self.is_exists(f"unique>{value}"):
+            value += 1
+
+        return f"unique>{value}"
 
     def set_scope(self, scope):
         self.current_scope = scope
@@ -1500,6 +1580,13 @@ class Context:
         return name
 
     def delete_scope(self, scope):
+        for i in self.scope[scope]:
+            if self.scope[scope][i]["type"] == "trigger":
+                self.scope[scope][i]["target"](*(self.scope[scope][i]["args"]))
+            
+            if "value" in self.scope[scope][i] and "callback" in self.scope[scope][i]["value"]:
+                self.scope[scope][i]["value"]["callback"](self, self.scope[scope][i]["value"])
+
         del self.scope[scope]
 
     def add_parent_scope(self, scope):
@@ -1522,96 +1609,233 @@ class Context:
 
         return tmp
 
-    def is_exists(self, key):
-        tmp = self.scope["global"].copy()
+    def begin_namespace(self, name):
+        if not self.is_exists(name):
+            self.set(name, {"type": "namespace", "name": name, "scope": {}})
 
-        if self.current_scope != "global":
-            tmp.update(self.scope[self.current_scope])
+        self.namespaces.append(name)
 
-        return key in tmp
+    def end_namespace(self):
+        self.namespaces.pop()
 
-    def set(self, key, value, force = False, record_pass = False):
-        if not record_pass and self.current_scope == "global":
-            if len(self.recorded) != 0:
-                for i in self.recorded:
-                    self.recorded[i][key] = value
+    def create_struct(self, name, type):
+        struct = self.get(type["value"])
+        object = {"type": "struct_object", "struct_type": type["value"], "parent_scope": self.current_scope, "scope": {"public": {}, "private": {}}}
+    
+        for j in struct["ast"]:
+            if j["type"] in ["func", "var", "constructor", "destructor"]:
+                if j["type"] in ["constructor", "destructor"]:
+                    j["name"] = "<" + j["type"] + ">"
+                    j["type"] = "func"
+                    j["return_type"] = "VOID"
 
-        if force:
-            self.scope[self.current_scope][key] = value
-            return
+                tmp = j["name"]
+                j["name"] = self.get_unique_name()
+                self.pass_scope_check = True
+                tmp_ast = self.ast
+                self.ast = [j]
+                tmp_ret = self.current_return_type
+                if j["type"] == "func": self.current_return_type = j["return_type"]
+                else: self.current_return_type = None
+                value = interpreter(self)
+                self.current_return_type = tmp_ret
+                self.ast = tmp_ast
+                self.pass_scope_check = False
+                tmp_var = self.get(j["name"])
+                tmp_var["parent_object"] = object
+                object["scope"]["public"][tmp] = tmp_var
+                j["name"] = tmp
 
-        tmp = self.parent_scopes.copy()
-        tmp.reverse()
+                if tmp in ["<constructor>", "<destructor>"]:
+                    print("aaahhhhh")
 
-        if self.is_thread:
-            if key in self.actual_context.scope["global"] and key not in self.scope[self.current_scope]:
-                found = False
+        self.set(name, object)
 
-                for i in tmp:
-                    if key in self.scope[i]:
-                        found = True
+    def parse_key(self, key):
+        key = key.split("::")
+        namespaces = key[:-1]
+        objects = key[len(namespaces)].split(".")
+        return namespaces, objects
 
-                if not found:
-                    self.actual_context.scope["global"][key] = value
-                    return
+    def is_exists(self, key, search_current = False):
+        namespaces, objects = self.parse_key(key)
 
-        if key in self.scope[self.current_scope]:
-            self.scope[self.current_scope][key] = value
-            return
+        target = objects[0]
+        object = None
 
-        elif key in self.scope["global"]:
-            self.scope["global"][key] = value
-            return
-        
-        for i in tmp:
-            if key in self.scope[i]:
-                self.scope[i][key] = value
-                return
+        if namespaces == []:
+            for i in ([self.current_scope] if search_current else list(set([self.current_scope] + self.parent_scopes[::-1] + ["global"]))):
+                if i == "global":
+                    current = [self.scope["global"]]
 
-        self.scope[self.current_scope][key] = value
+                    for j in self.namespaces:
+                        if j not in current[len(current) - 1]:
+                            tools.error("namespace '" + j + "' was not declared in this scope", self.file)
+
+                        current.append(current[len(current) - 1][j]["scope"])
+
+                    for j in current[::-1]:
+                        if target in j:
+                            object = j[target]
+                            break
+
+                elif target in self.scope[i]:
+                    object = self.scope[i][target]
+
+                if object != None: break
+
+        else:
+            current = self.scope["global"]
+
+            for i in namespaces:
+                if i not in current:
+                    tools.error("namespace '" + i + "' was not declared in this scope", self.file)
+
+                current = current[i]["scope"]
+
+            if target not in current:
+                return False
+
+            object = current[target]
+
+        if object == None:
+            return False
+
+        for i in objects[1:]:
+            if "value" in object and type(object["value"]) != list:
+                object = object["value"]
+
+            if i not in object["scope"]["public"]:
+                return False
+
+            object = object["scope"]["public"][i]
+
+        return True
+
+    def set(self, key, value, force = False):
+        namespaces, objects = self.parse_key(key)
+
+        if self.namespaces == []:
+            scope = self.scope[self.current_scope]
+
+            if not force:
+                if namespaces == []:
+                    for i in list(set([self.current_scope] + self.parent_scopes[::-1] + ["global"])):
+                        if i == "global":
+                            current = [self.scope["global"]]
+
+                            for j in self.namespaces:
+                                if j not in current[len(current) - 1]:
+                                    tools.error(f"namespace '{j}' was not declared in this scope", self.file)
+
+                                current.append(current[len(current) - 1][j]["scope"])
+
+                            for j in current[::-1]:
+                                if objects[0] in j:
+                                    scope = j
+                                    break
+
+                            if objects[0] in j:
+                                break
+
+                        elif objects[0] in self.scope[i]:
+                            scope = self.scope[i]
+                            break
+
+                else:
+                    scope = self.scope["global"]
+
+                    for i in namespaces:
+                        scope = scope[i]["scope"]
+
+            key = objects[0]
+
+            if len(objects) != 1:
+                object = scope[key]
+
+            for i in objects[1:]:
+                key = i
+                scope = object["scope"]["public"]
+                object = object["scope"]["public"][i]
+            
+            if key in scope:
+                if "value" in scope[key] and "callback" in scope[key]["value"]:
+                    scope[key]["value"]["callback"](self, scope[key]["value"])
+
+            if "not assigned" in value:
+                del value["not assigned"]
+                
+            scope[key] = value
+
+        else:
+            if namespaces != [] and len(objects) != 1:
+                tools.error("invalid usage of namespaces", self.file)
+
+            scope = self.scope["global"]
+
+            for i in self.namespaces:
+                scope = scope[i]["scope"]
+
+            scope[objects[0]] = value
 
     def get(self, key):
         if self.is_exists(key):
-            if self.current_scope != "global":
-                if key in self.scope[self.current_scope]:
-                    return self.scope[self.current_scope][key]
+            namespaces, objects = self.parse_key(key)
 
-            if self.is_thread:
-                if self.actual_context.scope["global"][key] != self.scope["global"][key]:
-                    self.scope["global"][key] = self.actual_context.scope["global"][key]
+            target = objects[0]
+            object = None
 
-            return self.scope["global"][key]
+            if namespaces == []:
+                for i in list(set([self.current_scope] + self.parent_scopes[::-1] + ["global"])):
+                    if i == "global":
+                        current = [self.scope["global"]]
 
-        else:
-            if len(self.parent_scopes) != 0:
-                tmp_scope = self.current_scope
-                self.current_scope = self.parent_scopes[len(self.parent_scopes) - 1]
-                tmp = self.parent_scopes.copy()
-                self.parent_scopes.pop(len(self.parent_scopes) - 1)
-                res = self.get(key)
-                self.parent_scopes = tmp
-                self.current_scope = tmp_scope
-                return res
+                        for j in self.namespaces:
+                            if j not in current[len(current) - 1]:
+                                tools.error("namespace '" + j + "' was not declared in this scope", self.file)
+
+                            current.append(current[len(current) - 1][j]["scope"])
+
+                        for j in current[::-1]:
+                            if target in j:
+                                object = j[target]
+                                break
+
+                    elif target in self.scope[i]:
+                        object = self.scope[i][target]
+
+                    if object != None: break
 
             else:
-                tools.error(f"'{key}' was not declared in this scope", self.file)
+                current = self.scope["global"]
 
-    def delete(self, key, record_pass = False):
+                for i in namespaces:
+                    current = current[i]["scope"]
+
+                object = current[target]
+
+            for i in objects[1:]:
+                if "value" in object and type(object["value"]) != list:
+                    object = object["value"]
+
+                object = object["scope"]["public"][i]
+
+            return object
+
+        else:
+            tools.error(f"'{key}' was not declared in this scope", self.file)
+
+    def delete(self, key):
         if self.is_exists(key):
-            if not record_pass and self.current_scope == "global":
-                if len(self.recorded) != 0:
-                    for i in self.recorded:
-                        del self.recorded[i][key]
-
             if self.current_scope != "global":
                 if key in self.scope[self.current_scope]:
+                    if "value" in self.scope[self.current_scope][key] and "callback" in self.scope[self.current_scope][key]["value"]:
+                        self.scope[self.current_scope][key]["callback"](self, self.scope[self.current_scope][key]["value"])
                     del self.scope[self.current_scope][key]
                     return
 
-            if self.is_thread:
-                if key in self.actual_context.scope["global"]:
-                    del self.actual_context.scope["global"][key]
-
+            if "value" in self.scope["global"][key] and "callback" in self.scope["global"][key]["value"]:
+                self.scope["global"][key]["callback"](self, self.scope["global"][key]["value"])
             del self.scope["global"][key]
 
         else:
@@ -1621,7 +1845,7 @@ class Context:
         return self.main_file == self.file
 
     def is_in_function(self):
-        return self.current_scope != "global"
+        return self.current_scope != "global" and not self.pass_scope_check
 
     def prepare_to_execute(self, key):
         name = key.split(">")[0]
@@ -1635,13 +1859,17 @@ class Context:
         else:
             self.recursions[name] = 1
 
-        tmp = self.current_scope
-        self.current_scope = self.add_scope(key)
-        self.cache[self.current_scope] = {"ast": self.ast, "current_return_type": self.current_return_type, "current_array_type": self.current_array_type, "current_scope": tmp, "parent_scopes": self.parent_scopes}
+        tmp = self.add_scope(key)
+        
+        self.cache[tmp] = {
+            "ast": self.ast, "current_return_type": self.current_return_type,
+            "current_scope": self.current_scope, "parent_scopes": self.parent_scopes
+        }
+
         self.ast = self.get(key)["ast"]
-        self.parent_scopes = []
         self.current_return_type = self.get(key)["return_type"]
-        self.current_array_type = self.get(key)["array_type"]
+        self.current_scope = tmp
+        self.parent_scopes = []
         return self.current_scope
 
     def end_execute(self):
@@ -1656,7 +1884,7 @@ class Context:
 
         self.delete_scope(self.current_scope)
         tmp = self.current_scope
-        self.ast, self.current_return_type, self.current_array_type = self.cache[self.current_scope]["ast"], self.cache[self.current_scope]["current_return_type"], self.cache[self.current_scope]["current_array_type"]
+        self.ast, self.current_return_type = self.cache[self.current_scope]["ast"], self.cache[self.current_scope]["current_return_type"]
         self.current_scope, self.parent_scopes = self.cache[self.current_scope]["current_scope"], self.cache[self.current_scope]["parent_scopes"]
         del self.cache[tmp]
 
@@ -1688,15 +1916,6 @@ class Context:
         else:
             return self.program_state_var
 
-    def record(self):
-        self.recorded[len(self.recorded)] = {}
-        return len(self.recorded) - 1
-
-    def end_record(self, num):
-        tmp = self.recorded[num].copy()
-        del self.recorded[num]
-        return tmp
-
 def interpreter(context: Context):
     result_report = {}
 
@@ -1704,36 +1923,28 @@ def interpreter(context: Context):
         context.update()
         if isinstance(i, str) or i == None: tools.error(f"unknown exception at runtime (probably caused by an unhandled parser exception)", f"{context.file}:<{i}>")
         if i["type"] == "func":
-            if context.current_scope != "global":
+            if context.current_scope != "global" and not context.pass_scope_check:
                 tools.error("a function-definition is not allowed here before", context.file)
 
             if context.is_exists(i["name"]):
                 tools.error("can't overload a function", context.file)
 
-            if i["return_type"] not in ["VOID", "FLOAT", "INT", "STRING", "BOOL", "ARRAY"]:
-                tools.error("unknown type for a function: '" + i["return_type"].lower() + "'", context.file)
+            if not (i["return_type"] in ["VOID", "FLOAT", "INT", "STRING", "BOOL"] or tools.is_array_t(i["return_type"])):
+                tools.error("unknown return type for a function: '" + i["return_type"].lower() + "'", context.file)
 
-            context.set(i["name"], {"type": "func", "return_type": i["return_type"], "array_type": i["array_type"], "args": i["args"], "ast": i["ast"], "const": False})
+            context.set(i["name"], {"type": "func", "return_type": i["return_type"], "args": i["args"], "ast": i["ast"], "const": False})
             context.add_scope(i["name"])
 
-            if i["name"] == "main" and i["return_type"] == "INT" and (i["args"] == {"args": {"type": "ARRAY", "array_type": "STRING", "size": None}} or i["args"] == {}):
+            if i["name"] == "main" and i["return_type"] == "INT" and (i["args"] == {"args": {"type": "ARRAY_T", "array_type": "STRING", "size": None}} or i["args"] == {}):
                 if context.is_main_file() and not context.is_in_function() and context.program_state():
                     context.prepare_to_execute("main")
 
-                    if i["args"] == {"args": {"type": "ARRAY", "array_type": "STRING", "size": None}}:
-                        elements = []
-
-                        for j in context.args:
-                            elements.append({"type": "STRING", "value": j})
-
-                        value = {"type": "ARRAY", "array_type": "STRING", "value": elements}
-                        __args_func = lambda environ: len(environ["context"].get("args")["value"]["value"])
-                        context.set("args.length", {"type": "libfunc", "args": {}, "return_type": "INT", "func": __args_func, "const": True}, True)
-                        context.set("args", {"type": "var", "value": value.copy(), "const": True}, True)
+                    if i["args"] == {"args": tools.ArrayType(tools.StringType(), size = None)}:
+                        context.set("args", tools.Array(context.args), True)
 
                     error_code = interpreter(context)
                     context.end_execute()
-                    
+
                     if error_code in ["BREAK", "CONTINUE"]:
                         tools.error("can't use '" + error_code.lower() + "' here", context.file)
 
@@ -1744,17 +1955,19 @@ def interpreter(context: Context):
                         if error_code["type"] == "INT":
                             error_code = error_code["value"]
 
+        elif i["type"] == "struct":
+            if context.current_scope != "global" and not context.pass_scope_check:
+                tools.error("a structure-definition is not allowed here before", context.file)
+
+            context.set(i["name"], {"type": "struct", "ast": i["ast"]})
+
         elif i["type"] == "namespace":
+            context.begin_namespace(i["name"])
             tmp = context.ast
             context.ast = i["ast"]
-            num = context.record()
             interpreter(context)
-            tmp_scope = context.end_record(num)
             context.ast = tmp
-            
-            for j in tmp_scope:
-                context.set(i["name"] + "::" + j, tmp_scope[j])
-                context.delete(j)
+            context.end_namespace()
 
         elif i["type"] in ["increment", "decrement"]:
             if i["value"]["type"] != "IDENTIFIER":
@@ -1769,12 +1982,22 @@ def interpreter(context: Context):
                 temp = context.get(value)["value"]
 
                 if context.get(value)["value"]["type"] == "INT":
-                    context.set(value,
-                        {"type": "var", "value": {"type": context.get(value)["value"]["type"], "value": str(int(context.get(value)["value"]["value"]) + (1 if i["type"] == "increment" else -1))}, "const": False})
+                    context.set(value, {
+                        "type": "var", "value": {
+                            "type": context.get(value)["value"]["type"],
+                            "value": str(int(context.get(value)["value"]["value"]) + (1 if i["type"] == "increment" else -1))},
+                            "const": False
+                        }
+                    )
 
                 elif context.get(value)["value"]["type"] == "FLOAT":
-                    context.set(value,
-                        {"type": "var", "value": {"type": context.get(value)["value"]["type"], "value": str(float(context.get(value)["value"]["value"].lower().replace("f", "")) + (1 if i["type"] == "increment" else -1)) + "f"}, "const": False})
+                    context.set(value, {
+                        "type": "var", "value": {
+                            "type": context.get(value)["value"]["type"],
+                            "value": str(float(context.get(value)["value"]["value"].lower().replace("f", "")) + (1 if i["type"] == "increment" else -1)) + "f"},
+                            "const": False
+                        }
+                    )
 
                 else:
                     tools.error("unknown error", context.file)
@@ -1792,106 +2015,156 @@ def interpreter(context: Context):
         elif i["type"] in ["break", "continue"]:
             if not context.is_in_function(): tools.error("can't use '" + i["type"] + "' here", context.file)
             return i["type"].upper()
+
+        elif "type" in i["type"] and i["type"]["type"] == "STRUCT_T":
+            tools.error("invalid usage of structures", context.file)
                 
         elif i["type"] == "var":
-            if i["value"] == None:
-                i["value"] = {"type": i["value_type"], "array_type": i["array_type"], "size": i["size"], "value": None}
-
-            tmp_ast = context.ast
-            context.ast = [i["value"]]
-            value = interpreter(context)
-            context.ast = tmp_ast
-
-            if i["value_type"] == None:
-                if context.get(i["name"])["const"]:
-                    tools.error("assignment of read-only variable '" + i["name"] + "'", context.file)
-
-                if value["type"] != context.get(i["name"])["value"]["type"]:
+            if (i["value_type"] != None and "type" in i["value_type"] and i["value_type"]["type"] == "STRUCT_T") \
+                or (context.is_exists(i["name"]) and context.get(i["name"])["type"] == "struct_object"):
+                if i["value"] != None:
                     tmp_ast = context.ast
-                    context.ast = [{"type": "cast", "cast_type": context.get(i["name"])["value"]["type"], "value": value}]
+                    context.ast = [i["value"]]
                     value = interpreter(context)
                     context.ast = tmp_ast
 
-                context.set(i["name"], {"type": "var", "value": value.copy(), "const": context.get(i["name"])["const"]})
+                    if i["value_type"] == None:
+                        i["value_type"] = {"type": "STRUCT_T", "value": context.get(i["name"])["struct_type"]}
 
-            else:
-                if context.is_exists(i["name"]):
-                    tools.error("redefinition of '" + i["name"] + "'", context.file)
+                    if value["type"] == "struct_object" and i["value_type"]["value"] == value["struct_type"]:
+                        value["const"] = i["const"]
+                        context.set(i["name"], value, True)
+
+                    else:
+                        tools.error("bad value", context.file)
 
                 else:
-                    if i["value_type"] == "AUTO":
-                        if value == None:
-                            tools.error("required a value for auto type", context.file)
+                    context.create_struct(i["name"], i["value_type"])
 
-                    elif value["type"] != i["value_type"] and value["type"] != "NULL":
+            else:
+                size = None
+
+                if i["value_type"] != None and "type" in i["value_type"] and i["value_type"]["type"] == "ARRAY_T":
+                    if "type" in i["value_type"]["array_type"] and i["value_type"]["array_type"]["type"] == "STRUCT_T":
+                        tools.error("cannot create an array with struct", context.file)
+
+                    if i["value_type"]["size"] != None:
                         tmp_ast = context.ast
-                        context.ast = [{"type": "cast", "cast_type": i["value_type"], "value": value}]
+                        context.ast = [i["value_type"]["size"]]
+                        size = interpreter(context)
+                        context.ast = tmp_ast
+
+                if i["value"] == None and "type" in i["value_type"] and i["value_type"]["type"] == "ARRAY_T":
+                    value = {"type": "array_object", "array_type": i["value_type"]["array_type"], "size": size, "value": {}, "scope": {"public": {}, "private": {}}}
+
+                else:
+                    if i["value"] == None:
+                        i["value"] = {"type": i["value_type"], "value": None}
+
+                    tmp_ast = context.ast
+                    context.ast = [i["value"]]
+                    value = interpreter(context)
+                    context.ast = tmp_ast
+
+                if i["value_type"] == None:
+                    if context.get(i["name"])["const"]:
+                        tools.error("assignment of read-only variable '" + i["name"] + "'", context.file)
+
+                    if value["type"] != context.get(i["name"])["value"]["type"]:
+                        tmp_ast = context.ast
+                        context.ast = [{"type": "cast", "cast_type": context.get(i["name"])["value"]["type"], "value": value}]
                         value = interpreter(context)
                         context.ast = tmp_ast
 
-                    elif i["value_type"] == "ARRAY":
-                        if i["size"] != None:
-                            tmp_ast = context.ast
-                            context.ast = [i["size"]]
-                            size = interpreter(context)
-                            context.ast = tmp_ast
+                    context.set(i["name"], {"type": "var", "value": value.copy(), "const": context.get(i["name"])["const"]})
 
-                            tmp_ast = context.ast
-                            context.ast = [{"type": i["array_type"], "value": None}]
-                            temp_type = interpreter(context)
-                            context.ast = tmp_ast
+                else:
+                    if context.is_exists(i["name"], True):
+                        tools.error("redefinition of '" + i["name"] + "'", context.file)
 
-                            if size["type"] == "INT":
-                                elements = [temp_type] * int(size["value"])
+                    else:
+                        if i["value_type"] == "AUTO":
+                            if value == None:
+                                tools.error("required a value for auto type", context.file)
 
-                            else:
-                                tools.error("size must be an integer", context.file)
-
-                        else:
-                            elements = []
-
-                        temp = value["value"]
-
-                        if temp == None:
-                            temp = []
-
-                        for temp_index, j in enumerate(temp):
-                            if i["size"] != None:
-                                if temp_index >= int(size["value"]):
-                                    tools.error("'array' index out of range", context.file)
-
-                            else:
-                                elements.append(None)
-
-                            tmp_ast = context.ast
-                            context.ast = [j]
-                            element = interpreter(context)
-                            context.ast = tmp_ast
-
-                            if element["type"] != i["array_type"]:
+                        elif tools.is_array_t(i["value_type"]) and tools.is_array(value):
+                            if i["value_type"]["size"] != None:
                                 tmp_ast = context.ast
-                                context.ast = [{"type": "cast", "cast_type": i["array_type"], "value": element}]
+                                context.ast = [{"type": i["value_type"]["array_type"], "value": None}]
+                                temp_type = interpreter(context)
+                                context.ast = tmp_ast
+
+                                if size["type"] == "INT":
+                                    if int(size["value"]) < 0:
+                                        tools.error("size must be positive", context.file)
+
+                                    elements = [temp_type] * int(size["value"])
+
+                                else:
+                                    tools.error("size must be an integer", context.file)
+
+                            else:
+                                if i["value"] == None:
+                                    tools.error("size must be defined when no value is given", context.file)
+
+                                elements = []
+
+                            temp = value["value"]
+
+                            if temp == None:
+                                temp = []
+
+                            for temp_index, j in enumerate(temp):
+                                if i["value_type"]["size"] != None:
+                                    if temp_index >= int(size["value"]):
+                                        tools.error("'array' index out of range", context.file)
+
+                                else:
+                                    elements.append(None)
+
+                                tmp_ast = context.ast
+                                context.ast = [j]
                                 element = interpreter(context)
                                 context.ast = tmp_ast
 
-                            elements[temp_index] = element
+                                if element["type"] != i["value_type"]["array_type"]:
+                                    tmp_ast = context.ast
+                                    context.ast = [{"type": "cast", "cast_type": i["value_type"]["array_type"], "value": element}]
+                                    element = interpreter(context)
+                                    context.ast = tmp_ast
 
-                        name = i["name"]
-                        temp_globals = {}
-                        value = {"type": "ARRAY", "array_type": i["array_type"], "size": i["size"], "value": elements}
-                        exec(f"__{name}_func = lambda environ: len(environ[\"context\"].get(\"{name}\")[\"value\"][\"value\"])", temp_globals)
-                        context.set(i["name"] + ".length", {"type": "libfunc", "args": {}, "return_type": "INT", "func": temp_globals[f"__{name}_func"], "const": i["const"]}, True)
+                                elements[temp_index] = element
 
-                    context.set(i["name"], {"type": "var", "value": value.copy(), "const": i["const"]}, True)
+                            _globals = {}
+
+                            exec(
+                                "def func(environ):\n" +
+                                "    temp = environ[\"context\"].get(\"" + i["name"] + "\")[\"value\"]\n" +
+                                "    return len(temp[\"value\"] if \"value\" in temp else temp)", _globals
+                            )
+
+                            value = {
+                                "type": "array_object", "array_type": i["value_type"]["array_type"], "size": i["value_type"]["size"], "value": elements, "scope": {
+                                    "public": {
+                                        "length": {"type": "libfunc", "args": {}, "return_type": "INT", "func": _globals["func"], "const": True}
+                                }, "private": {}}
+                            }
+
+                        elif value["type"] != i["value_type"] and value["type"] != "NULL":
+                            tmp_ast = context.ast
+                            context.ast = [{"type": "cast", "cast_type": i["value_type"], "value": value}]
+                            value = interpreter(context)
+                            context.ast = tmp_ast
+
+                        context.set(i["name"], {"type": "var", "value": value.copy(), "const": i["const"]}, True)
 
         elif i["type"] == "include":
             for lib in i["libs"]:
                 if context.is_included(lib) and not context.is_compiled():
-                    tools.warning("trying to include '" + lib + "' twice", context.file)
+                    # tools.warning("trying to include '" + lib + "' twice", context.file)
                     continue
 
                 context.included.append(lib)
-
                 name, ext = os.path.splitext(lib)
 
                 if ext == ".py":
@@ -1911,8 +2184,9 @@ def interpreter(context: Context):
 
                     if i["namespace"]:
                         for j in tmp:
-                            context.set((lib if i["special_namespace"] == None else i["special_namespace"]) + "::" + j, tmp[j])
-                            context.delete(j)
+                            context.begin_namespace(lib if i["special_namespace"] == None else i["special_namespace"])
+                            context.set(j, tmp[j])
+                            context.end_namespace()
                     
                     else:
                         for j in tmp:
@@ -1926,7 +2200,6 @@ def interpreter(context: Context):
                                             break
 
                                     if not found:
-                                        context.delete(j)
                                         continue
                             
                             context.set(j, tmp[j])
@@ -1960,15 +2233,17 @@ def interpreter(context: Context):
                                 if content["version"] == context.version:
                                     if content["file_content"] == hashlib.sha256(file_content.encode()).digest():
                                         ast = content["ast"]
+                                        context.custom_types += content["custom_types"]
 
                     if ast is None:
-                        ast = parser(lexer(tools.read_file(file_path), file_path), file_path)
+                        ast = parser(lexer(tools.read_file(file_path), file_path), file_path, context.custom_types)
 
                         with open(os.path.splitext(file_path)[0] + ".rsxc", "wb") as file:
-                            file.write(tools.dump_bytecode(ast, file_content))
+                            file.write(tools.dump_bytecode(ast, context.custom_types, file_content))
 
                     context.prepare_to_include(ast, file_path)
-                    num = context.record()
+                    if i["namespace"]:
+                        context.begin_namespace(lib if i["special_namespace"] == None else i["special_namespace"])
                     tmp_ret = context.current_return_type
                     context.current_return_type = None
                     tmp_parent_scopes = context.parent_scopes
@@ -1976,58 +2251,58 @@ def interpreter(context: Context):
                     interpreter(context)
                     context.parent_scopes = tmp_parent_scopes
                     context.current_return_type = tmp_ret
-                    tmp = context.end_record(num)
+                    if i["namespace"]: context.end_namespace()
                     context.end_include()
 
-                    if i["namespace"]:
-                        for j in tmp:
-                            context.set((lib if i["special_namespace"] == None else i["special_namespace"]) + "::" + j, tmp[j])
-                            context.delete(j)
+                    if not i["namespace"] and i["names"] != None:
+                        tools.error("including by name is not implemented", context.file)
 
-                    else:
-                        for j in tmp:
-                            if i["names"] != None:
-                                if j not in i["names"]:
-                                    found = False
-
-                                    for name in i["names"]:
-                                        if j.startswith(name):
-                                            found = True
-                                            break
-
-                                    if not found:
-                                        context.delete(j)
-                                        continue
-
-                            context.set(j, tmp[j])
-
-        elif i["type"] == "ARRAY":
+        elif i["type"] == "INITLIST":
             if i["value"] == None:
-                return {"type": "ARRAY", "array_type": i["array_type"], "size": i["size"], "value": []}
+                tools.error("initializer list error")
 
-            else:
-                elements = []
+            elements = []
 
-                for j in i["value"]:
-                    tmp_ast = context.ast
-                    context.ast = [j]
-                    elements.append(interpreter(context))
-                    context.ast = tmp_ast
+            for j in i["value"]:
+                tmp_ast = context.ast
+                context.ast = [j]
+                elements.append(interpreter(context))
+                context.ast = tmp_ast
 
-                type = None
+            type = None
 
-                for i in elements:
-                    if type == None: type = i["type"]
-                    if i["type"] != type: tools.error("array type mismatch", context.file)
+            for i in elements:
+                if type == None: type = i["type"]
+                if i["type"] != type: tools.error("array type mismatch", context.file)
 
-                return {"type": "ARRAY", "array_type": type, "size": {"type": "INT", "value": str(len(elements))}, "value": elements}
+            _globals = {}
+
+            exec(
+                "def func(environ):\n" +
+                "    return " + str(len(elements)), _globals
+            )
+
+            array = {
+                "type": "array_object", "array_type": type, "size": len(elements), "value": elements, "scope": {
+                    "public": {
+                        "length": {"type": "libfunc", "args": {}, "return_type": "INT", "func": _globals["func"], "const": True}
+                }, "private": {}}
+            }
+
+            return array
+
+        elif i["type"] in ["struct_object", "array_object"]:
+            return i
 
         elif i["type"] in ["IDENTIFIER", "AUTO", "BOOL", "STRING", "INT", "FLOAT", "VOID", "NULL"]:
             if i["type"] == "IDENTIFIER":
                 temp = context.get(i["value"])
 
-                if temp["type"] in ["libfunc", "func"]:
+                if temp["type"] in ["libfunc", "func", "struct"]:
                     return i["value"]
+
+                if temp["type"] in ["struct_object", "array_object"]:
+                    return temp
 
                 return temp["value"].copy()
 
@@ -2064,7 +2339,7 @@ def interpreter(context: Context):
             target = interpreter(context)
             context.ast = tmp_ast
 
-            if target["type"] not in ["ARRAY", "STRING"]:
+            if target["type"] not in ["array_object", "STRING"]:
                 if target["type"] == "IDENTIFIER":
                     tools.error("'" + target["value"] + "' is not subscriptable", context.file)
 
@@ -2095,7 +2370,7 @@ def interpreter(context: Context):
             target = interpreter(context)
             context.ast = tmp_ast
 
-            if target["type"] not in ["ARRAY"]:
+            if target["type"] not in ["array_object"]:
                 if target["type"] == "IDENTIFIER":
                     tools.error("'" + target["value"] + "' does not support item assignment", context.file)
 
@@ -2170,8 +2445,15 @@ def interpreter(context: Context):
                 else:
                     tools.error("unexpected type", context.file)
 
+            elif value["type"] == "INT":
+                if value["value"] == "0":
+                    return {"type": value["type"], "value": "TRUE"}
+
+                else:
+                    return {"type": value["type"], "value": "FALSE"}
+
             else:
-                tools.error("'!' operator can only use with booleans", context.file)
+                tools.error("expected 'int' or 'bool' value for '!' operator, not '" + value["type"].lower() + "'", context.file)
 
         elif i["type"] == "bitwise not":
             tmp_ast = context.ast
@@ -2342,20 +2624,17 @@ def interpreter(context: Context):
                     return value
 
                 elif value["type"] == "INT":
-                    if value["value"] == "1":
-                        return {"type": "BOOL", "value": "TRUE"}
-
-                    elif value["value"] == "0":
+                    if value["value"] == "0":
                         return {"type": "BOOL", "value": "FALSE"}
 
                     else:
-                        tools.error("unexpected value", context.file)
+                        return {"type": "BOOL", "value": "TRUE"}
 
                 else:
                     tools.error("can't cast '" + value["type"].lower() + "' into '" + i["cast_type"].lower() + "'", context.file)
 
             else:
-                tools.error("can't cast '" + value["type"].lower() + "' into '" + i["cast_type"].lower() + "'", context.file)
+                tools.error("can't cast '" + str(value["type"]).lower() + "' into '" + str(i["cast_type"]).lower() + "'", context.file)
 
         elif i["type"] == "switch":
             tmp_ast = context.ast
@@ -2390,10 +2669,11 @@ def interpreter(context: Context):
                         if response != None:
                             if "type" in response:
                                 if response["type"] != "NULL":
-                                    context.set_scope(tmp)
-                                    context.delete_scope(cur)
-                                    context.rem_parent_scope(tmp)
-                                    return response
+                                    if context.return_state:
+                                        context.set_scope(tmp)
+                                        context.delete_scope(cur)
+                                        context.rem_parent_scope(tmp)
+                                        return response
 
                         if response == "BREAK":
                             context.set_scope(tmp)
@@ -2720,7 +3000,7 @@ def interpreter(context: Context):
             if left["type"] in ["FLOAT", "INT"] and right["type"] in ["FLOAT", "INT"]:
                 isfloat = left["type"] == "FLOAT" or right["type"] == "FLOAT"
 
-                if float(left["value"].replace("f", "")) == 0.0 or float(right["value"].replace("f", "")) == 0.0:
+                if float(right["value"].replace("f", "")) == 0.0:
                     tools.error("division by zero", context.file)
 
                 if isfloat:
@@ -2788,6 +3068,7 @@ def interpreter(context: Context):
                 response = interpreter(context)
                 context.current_return_type = tmp_ret
                 context.ast = tmp_ast
+                tmp_ret_state = context.return_state
 
                 context.delete_scope(tmp_scp)
                 context.rem_parent_scope(cur)
@@ -2804,10 +3085,11 @@ def interpreter(context: Context):
                 if response != None:
                     if "type" in response:
                         if response["type"] != "NULL":
-                            context.rem_parent_scope(tmp)
-                            context.delete_scope(cur)
-                            context.set_scope(tmp)
-                            return response
+                            if tmp_ret_state:
+                                context.rem_parent_scope(tmp)
+                                context.delete_scope(cur)
+                                context.set_scope(tmp)
+                                return response
 
                 tmp_ast = context.ast
                 context.ast = [i["condition"]]
@@ -2847,10 +3129,11 @@ def interpreter(context: Context):
             elif response != None:
                 if "type" in response:
                     if response["type"] != "NULL":
-                        context.delete_scope(cur)
-                        context.set_scope(tmp)
-                        context.rem_parent_scope(tmp)
-                        return response
+                        if context.return_state:
+                            context.delete_scope(cur)
+                            context.set_scope(tmp)
+                            context.rem_parent_scope(tmp)
+                            return response
 
             context.set_scope(tmp)
             if cur in context.scope: context.delete_scope(cur)
@@ -2879,10 +3162,11 @@ def interpreter(context: Context):
             elif response != None:
                 if "type" in response:
                     if response["type"] != "NULL":
-                        context.delete_scope(cur)
-                        context.set_scope(tmp)
-                        context.rem_parent_scope(tmp)
-                        return response
+                        if context.return_state:
+                            context.delete_scope(cur)
+                            context.set_scope(tmp)
+                            context.rem_parent_scope(tmp)
+                            return response
 
             context.set_scope(tmp)
             context.rem_parent_scope(tmp)
@@ -2907,10 +3191,11 @@ def interpreter(context: Context):
                 if response != None:
                     if "type" in response:
                         if response["type"] != "NULL":
-                            context.set_scope(tmp)
-                            context.delete_scope(cur)
-                            context.rem_parent_scope(tmp)
-                            return response
+                            if context.return_state:
+                                context.set_scope(tmp)
+                                context.delete_scope(cur)
+                                context.rem_parent_scope(tmp)
+                                return response
 
                 context.set_scope(tmp)
                 context.rem_parent_scope(tmp)
@@ -2960,10 +3245,11 @@ def interpreter(context: Context):
                 if response != None:
                     if "type" in response:
                         if response["type"] != "NULL":
-                            context.delete_scope(cur)
-                            context.set_scope(tmp)
-                            context.rem_parent_scope(tmp)
-                            return response
+                            if context.return_state:
+                                context.delete_scope(cur)
+                                context.set_scope(tmp)
+                                context.rem_parent_scope(tmp)
+                                return response
 
                 context.set_scope(tmp)
                 context.rem_parent_scope(tmp)
@@ -3018,7 +3304,7 @@ def interpreter(context: Context):
 
                 elif response != None:
                     if "type" in response:
-                        if response["type"] != "NULL":
+                        if context.return_state:
                             context.set_scope(tmp)
                             context.delete_scope(cur)
                             context.rem_parent_scope(tmp)
@@ -3060,7 +3346,7 @@ def interpreter(context: Context):
 
                         elif response != None:
                             if "type" in response:
-                                if response["type"] != "NULL":
+                                if context.return_state:
                                     context.set_scope(tmp)
                                     context.delete_scope(cur)
                                     context.rem_parent_scope(tmp)
@@ -3102,7 +3388,7 @@ def interpreter(context: Context):
 
                     elif response != None:
                         if "type" in response:
-                            if response["type"] != "NULL":
+                            if context.return_state:
                                 context.set_scope(tmp)
                                 context.delete_scope(cur)
                                 context.rem_parent_scope(tmp)
@@ -3133,9 +3419,9 @@ def interpreter(context: Context):
             returned = interpreter(context)
             context.ast = tmp_ast
 
-            if returned["type"] == "ARRAY" and context.current_return_type == "ARRAY":
-                if returned["array_type"] != context.current_array_type:
-                    tools.error("type mismatch", context.file)
+            if context.current_return_type != None and returned["type"] == "array_object" and context.current_return_type["type"] == "ARRAY_T":
+                if returned["array_type"] != context.current_return_type["array_type"]:
+                    tools.error("array type mismatch", context.file)
 
             elif returned["type"] != context.current_return_type and context.current_return_type != None and returned["type"] != "NULL":
                 tmp_ast = context.ast
@@ -3143,12 +3429,10 @@ def interpreter(context: Context):
                 returned = interpreter(context)
                 context.ast = tmp_ast
 
+            context.return_state = True
             return returned
 
         elif i["type"] == "delete":
-            if context.get(i["value"])["type"] == "ARRAY":
-                context.delete(i["value"] + ".length")
-
             context.delete(i["value"])
 
         elif i["type"] == "call":
@@ -3158,129 +3442,143 @@ def interpreter(context: Context):
             context.ast = tmp_ast
             tmp_var = context.get(name)
 
+            tmp = []
+            raws = []
+
+            for j in i["args"]:
+                tmp_ast = context.ast
+                context.ast = [j]
+                tmp.append(interpreter(context))
+                context.ast = tmp_ast
+
+            for index, j in enumerate(tmp_var["args"].values()):
+                if "type" in j:
+                    if j["type"] in ["ARRAY_T", "RAW_ARRAY_T"] and tmp[index]["type"] == "array_object":
+                        if j["array_type"] != tmp[index]["array_type"] and j["array_type"] != None:
+                            tools.error("array types mismatch", context.file)
+
+                        if j["type"] == "RAW_ARRAY_T": raws.append(index)
+
+                    elif j["type"] in ["STRUCT_T", "RAW_STRUCT_T"] and tmp[index]["type"] == "struct_object":
+                        if j["value"] != tmp[index]["struct_type"] and j["value"] != None:
+                            tools.error("struct types mismatch", context.file)
+
+                        if j["type"] == "RAW_STRUCT_T": raws.append(index)
+
+                    else:
+                        tools.error("argument type mismatch for '" + name + "'", context.file)
+
+                elif tmp[index]["type"] != j and tmp[index]["type"] not in ["NULL"]:
+                    tmp_ast = context.ast
+                    context.ast = [{"type": "cast", "cast_type": j, "value": tmp[index]}]
+                    tmp[index] = interpreter(context)
+                    context.ast = tmp_ast
+
+            if len(i["args"]) != len(tmp_var["args"]):
+                tools.error("argument count didn't match for" + " " + "'" + name + "'", context.file)
+
             if tmp_var["type"] == "libfunc":
-                if len(i["args"]) == len(tmp_var["args"]):  
-                    tmp = []
+                new_tmp = {}
 
-                    for j in i["args"]:
-                        tmp_ast = context.ast
-                        context.ast = [j]
-                        tmp.append(interpreter(context))
-                        context.ast = tmp_ast
+                for index, j in enumerate(tmp):
+                    new_tmp[list(tmp_var["args"].keys())[index]] = \
+                        tools.rsx_to_py_value(j, context) if index not in raws else j
 
-                    for index, j in enumerate(tmp_var["args"].values()):
-                        if "type" in j:
-                            if j["type"] == tmp[index]["type"]:
-                                if j["array_type"] != tmp[index]["array_type"]:
-                                    tools.error("array types mismatch", context.file)
+                enviroment = {
+                    "args": new_tmp,
+                    "args_pure": {j: tmp[index] for index, j in enumerate(tmp_var["args"])},
+                    "file": context.file,
+                    "scope": context.scope,
+                    "context": context,
+                    "include_folders": context.include_folders
+                }
 
-                            else:
-                                tools.error("argument type mismatch for '" + i["name"] + "'", context.file)
+                returned = tmp_var["func"](enviroment)
 
-                        elif tmp[index]["type"] != j and tmp[index]["type"] not in ["NULL"]:
-                            tmp_ast = context.ast
-                            context.ast = [{"type": "cast", "cast_type": j, "value": tmp[index]}]
-                            tmp[index] = interpreter(context)
-                            context.ast = tmp_ast
-
-                    new_tmp = {}
-
-                    for index, j in enumerate(tmp):
-                        name = list(tmp_var["args"].keys())[index]
-                        new_tmp[name] = tools.rsx_to_py_value(j)
-
-                    enviroment = {
-                        "args": new_tmp,
-                        "file": context.file,
-                        "scope": context.scope,
-                        "context": context,
-                        "include_folders": context.include_folders
-                    }
-
-                    returned = tmp_var["func"](enviroment)
+                if not ("type" in tmp_var["return_type"] and tmp_var["return_type"]["type"] in ["RAW_STRUCT_T", "RAW_ARRAY_T"]):
                     returned = tools.py_to_rsx_value(returned)
 
-                    if returned["type"] not in [tmp_var["return_type"], "NULL"]:
-                        tools.error("expected '" + tmp_var["return_type"].lower() + "' got '" + returned["type"].lower() + "'", context.file)
+                if "type" in tmp_var["return_type"] and tmp_var["return_type"]["type"] in ["ARRAY_T", "RAW_ARRAY_T"]:
+                    if "array_type" in returned and returned["array_type"] not in [tmp_var["return_type"]["array_type"], "NULL"]:
+                        tools.error("expected '" + str(tmp_var["return_type"]["array_type"]).lower() + " array' got '" + \
+                            str(returned["array_type"]).lower() + " array' from: '" + name + "'", context.file)
 
-                    if len(context.ast) == 1:
-                        return returned
+                elif "type" in tmp_var["return_type"] and tmp_var["return_type"]["type"] in ["STRUCT_T", "RAW_STRUCT_T"]:
+                    if returned["type"] != "struct_object" or (returned["struct_type"] != tmp_var["return_type"]["value"] and tmp_var["return_type"]["value"] != None):
+                        tools.error("expected struct '" + str(tmp_var["return_type"]["value"]).lower() + "' got struct '" + \
+                                    str(returned["struct_type"]).lower() + "' from: '" + name + "'", context.file)
 
-                else:
-                    tools.error("argument count didn't match for" + " " + "'" + name + "'", context.file)
+                elif returned["type"] not in [tmp_var["return_type"], "NULL"]:
+                    tools.error("expected '" + str(tmp_var["return_type"]).lower() + "' got '" + str(returned["type"]).lower() + "' from: '" + name + "'", context.file)
+
+                if len(context.ast) == 1:
+                    return returned
 
             elif tmp_var["type"] == "func":
-                if len(i["args"]) == len(tmp_var["args"]):
-                    tmp = []
+                context.prepare_to_execute(name)
 
-                    for j in i["args"]:
+                for index, j in enumerate(tmp_var["args"].keys()):
+                    if tmp[index]["type"] in [tmp_var["args"][j], "NULL"]:
                         tmp_ast = context.ast
-                        context.ast = [j]
-                        tmp.append(interpreter(context))
+                        gen_ast = {"type": "var", "name": j, "value_type": tmp[index]["type"], "value": tmp[index], "const": False}
+                        context.ast = [gen_ast]
+                        tmp_ret = context.current_return_type
+                        context.current_return_type = None
+                        interpreter(context)
+                        context.current_return_type = tmp_ret
                         context.ast = tmp_ast
 
-                    for index, j in enumerate(tmp_var["args"].values()):
-                        if "type" in j:
-                            if j["type"] == tmp[index]["type"]:
-                                if j["array_type"] != tmp[index]["array_type"]:
-                                    tools.error("array types mismatch", context.file)
+                    elif tmp_var["args"][j]["type"] == "ARRAY_T" and tmp[index]["type"] == "array_object" and tmp[index]["array_type"] == tmp_var["args"][j]["array_type"]:
+                        context.set(j, tmp[index])
 
-                            else:
-                                tools.error("argument type mismatch for '" + i["name"] + "'", context.file)
+                    elif tmp[index]["type"] == "struct_object":
+                        context.set(j, tmp[index])
 
-                        elif tmp[index]["type"] != j and tmp[index]["type"] not in ["NULL"]:
-                            tmp_ast = context.ast
-                            context.ast = [{"type": "cast", "cast_type": j, "value": tmp[index]}]
-                            tmp[index] = interpreter(context)
-                            context.ast = tmp_ast
+                    else:
+                        tools.error("argument type mismatch for '" + name + "'", context.file)
 
-                    context.prepare_to_execute(name)
+                if "parent_object" in tmp_var:
+                    curr = tmp_var["parent_object"]["scope"]["public"]
 
-                    for index, j in enumerate(tmp_var["args"].keys()):
-                        if tmp[index]["type"] in [tmp_var["args"][j], "NULL"] or (tmp[index]["type"] == tmp_var["args"][j]["type"] == "ARRAY" and tmp[index]["array_type"] == tmp_var["args"][j]["array_type"]):
-                            tmp_ast = context.ast
-                            gen_ast = {"type": "var", "name": j, "value_type": tmp[index]["type"], "value": tmp[index], "const": False}
+                    for i in curr:
+                        context.set(i, curr[i])
 
-                            if tmp[index]["type"] == "ARRAY":
-                                gen_ast["array_type"] = tmp[index]["array_type"]
-                                gen_ast["size"] = tmp[index]["size"]
+                returned = interpreter(context)
 
-                            context.ast = [gen_ast]
-                            tmp_ret = context.current_return_type
-                            context.current_return_type = None
-                            interpreter(context)
-                            context.current_return_type = tmp_ret
-                            context.ast = tmp_ast
+                if "parent_object" in tmp_var:
+                    curr = tmp_var["parent_object"]["scope"]["public"]
 
-                        else:
-                            tools.error("argument type mismatch for '" + i["name"] + "'", context.file)
+                    for i in curr:
+                        tmp_var["parent_object"]["scope"]["public"][i] = context.get(i)
 
-                    returned = interpreter(context)
-                    context.end_execute()
+                context.end_execute()
+                context.return_state = False
 
-                    if returned == None:
-                        returned = {"type": "NULL", "value": "NULL"}
+                if returned == None:
+                    returned = {"type": "NULL", "value": "NULL"}
 
-                    if returned == {"type": "VOID", "value": "VOID"}:
-                        returned = {"type": "NULL", "value": "NULL"}
+                if returned == {"type": "VOID", "value": "VOID"}:
+                    returned = {"type": "NULL", "value": "NULL"}
 
-                    if returned in ["BREAK", "CONTINUE"]:
-                        tools.error("'break' or 'continue' keyword used in wrong place", context.file)
+                if returned in ["BREAK", "CONTINUE"]:
+                    tools.error("'break' or 'continue' keyword used in wrong place", context.file)
 
-                    if returned["type"] != tmp_var["return_type"]:
-                        tools.error("expected '" + tmp_var["return_type"].lower() + "' got '" + returned["type"].lower() + "'", context.file)
+                if returned["type"] not in [tmp_var["return_type"], "NULL"] and not \
+                    (returned["type"] == "array_object" and tmp_var["return_type"]["type"] == "ARRAY_T" and returned["array_type"] == tmp_var["return_type"]["array_type"]):
+                    tools.error("expected '" + str(tmp_var["return_type"]).lower() + "' got '" + str(returned["type"]).lower() + "' from: '" + name + "'", context.file)
 
-                    if len(context.ast) == 1:
-                        return returned
-
-                else:
-                    tools.error("argument count didn't match for" + " " + "'" + i["name"] + "'", context.file)
+                if len(context.ast) == 1:
+                    return returned
 
             else:
-                tools.error("argument type mismatch for '" + i["name"] + "'", context.file)
+                tools.error("expected a function, '" + name + "' is not a function", context.file)
 
         else:
-            tools.warning("undeclared" + " " + "'" + i["type"] + "'" + " " + "was passed", context.file)
+            if "type" in i["type"]:
+                tools.warning("undeclared '" + i["type"]["type"] + "' type was passed", context.file)
+
+            else:
+                tools.warning("undeclared '" + i["type"] + "' was passed", context.file)
 
     if context.is_base() and context.is_main_file():
         if context.program_state():
@@ -3290,7 +3588,7 @@ def interpreter(context: Context):
             if context.get("main")["return_type"] != "INT":
                 tools.error("no entry point", context.file)
 
-            if (context.get("main")["args"] != {"args": {"type": "ARRAY", "array_type": "STRING", "size": None}} and context.get("main")["args"] != {}):
+            if (context.get("main")["args"] != {"args": {"type": "ARRAY_T", "array_type": "STRING", "size": None}} and context.get("main")["args"] != {}):
                 tools.error("no entry point", context.file)
 
             if error_code != None:
@@ -3367,7 +3665,7 @@ def main():
             else:
                 tools.error(f"unknown operation '{i}'", file)
 
-        elif i in ["version", "run", "build", "help"]:
+        elif i in ["version", "run", "build", "format", "help"]:
             if mode == None: mode = i
             else: tools.error("mode already setted", file)
 
@@ -3376,8 +3674,8 @@ def main():
             program_args.append(i)
 
     if mode == None: mode = "run"
-    if file == None and mode not in ["version", "help"]: tools.error("no input files", "rsx", "fatal error", True)
-    if file != None and mode not in ["version", "help"]:
+    if file == None and mode not in ["version", "help", "format"]: tools.error("no input files", "rsx", "fatal error", True)
+    if file != None and mode not in ["version", "help", "format"]:
         if not os.path.isfile(file):
             tools.error("file not found", "rsx", "fatal error", True)
 
@@ -3398,6 +3696,7 @@ def main():
                     tools.error("bytecode version didn't match [bytecode: " + content["version"] + f", current: {version}]", file)
 
                 ast = content["ast"]
+                custom_types = content["custom_types"]
 
         else:
             file_content = tools.read_file(file)
@@ -3410,17 +3709,20 @@ def main():
                         if content["version"] == version:
                             if content["file_content"] == hashlib.sha256(file_content.encode()).digest():
                                 ast = content["ast"]
+                                custom_types = content["custom_types"]
 
             if ast == None:
                 tokens = lexer(file_content, file)
                 if get_tokens: print(tokens)
-                ast = parser(tokens, file)
+                custom_types = []
+                ast = parser(tokens, file, custom_types)
 
                 if bytecode:
-                    with open(os.path.splitext(file)[0] + ".rsxc", "wb") as f: f.write(tools.dump_bytecode(ast, file_content))
+                    with open(os.path.splitext(file)[0] + ".rsxc", "wb") as f: f.write(tools.dump_bytecode(ast, custom_types, file_content))
 
         if get_ast: print(ast)
         context = Context(ast, file)
+        context.custom_types = custom_types
         context.version = version
         context.include_folders = include_folders
         context.args = program_args
@@ -3442,6 +3744,12 @@ def main():
             console = console,
             context = context
         )
+
+    elif mode == "format":
+        content = tools.read_file(file)
+
+        with open(file, "w") as f:
+            f.write(tools.tokens_to_string(lexer(content, file)))
 
     elif mode == "version":
         tools.set_text_attr(12)

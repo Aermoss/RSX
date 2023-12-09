@@ -1,0 +1,4 @@
+include "rsxrvr/rsxrvr.py" : *;
+
+const int RVRControllerLeft = 0, RVRControllerRight = 1;
+const int RVREyeLeft = 0, RVREyeRight = 1;

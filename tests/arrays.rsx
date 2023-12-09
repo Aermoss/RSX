@@ -15,12 +15,12 @@ int arrays_three(int index) {
 
 int arrays_four() {
     if ({1, 2, 3} == {1, 2, 3}) return true;
-    else false;
+    else return false;
 }
 
 int arrays_five() {
     if ({1, 2, 3} == {1, 2, 2}) return true;
-    else false;
+    else return false;
 }
 
 float[] arrays_six() {
@@ -58,4 +58,13 @@ int[] arrays_ten(int[] a) {
     }
 
     return b;
+}
+
+void y(int[] b) {
+    b[1] = 10;
+}
+
+int[] arrays_eleven(int[] a) {
+    y(a);
+    return a;
 }

@@ -1,0 +1,5 @@
+include "rsxstd" : *;
+
+namespace std {
+    include "rsxcolor/rsxcolor.rsxh" : *;
+}

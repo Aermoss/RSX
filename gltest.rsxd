@@ -1,0 +1,469 @@
+include "rsxio", "rsxgl", "rsxglm", "rsxglfw", "rsxmath", "rsxobj", "rsxvec", "rsxf" : *;
+
+const int FLOAT_SIZE = 4;
+
+struct VAO {
+    int id;
+
+    void init() {
+        id = glGenVertexArrays(1);
+        return;
+    }
+
+    void enableAttrib(int index, int size, int stride, int pointer) {
+        glVertexAttribPointer(index, size, GL_FLOAT, false, stride, pointer);
+        glEnableVertexAttribArray(index);
+        return;
+    }
+
+    void bind() {
+        glBindVertexArray(id);
+        return;
+    }
+
+    void unbind() {
+        glBindVertexArray(0);
+        return;
+    }
+
+    void destroy() {
+        glDeleteVertexArrays(1, id);
+        return;
+    }
+};
+
+struct VBO {
+    int id;
+
+    void init() {
+        id = glGenBuffers(1);
+        return;
+    }
+
+    void bufferData(int size, float[] array) {
+        glBufferFloatData(GL_ARRAY_BUFFER, size, array, GL_STATIC_DRAW);
+        return;
+    }
+
+    void bind() {
+        glBindBuffer(GL_ARRAY_BUFFER, id);
+        return;
+    }
+
+    void unbind() {
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        return;
+    }
+
+    void destroy() {
+        glDeleteBuffers(1, id);
+        return;
+    }
+};
+
+struct IBO {
+    int id;
+
+    void init() {
+        id = glGenBuffers(1);
+        return;
+    }
+
+    void bufferData(int size, int[] array) {
+        glBufferIntData(GL_ELEMENT_ARRAY_BUFFER, size, array, GL_STATIC_DRAW);
+        return;
+    }
+
+    void bind() {
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, id);
+        return;
+    }
+
+    void unbind() {
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        return;
+    }
+
+    void destroy() {
+        glDeleteBuffers(1, id);
+        return;
+    }
+};
+
+struct Context {
+    void init() {
+        glfwInit();
+        return;
+    }
+
+    void terminate() {
+        glfwTerminate();
+        return;
+    }
+};
+
+struct Window {
+    int window;
+    float[4] backgroundColor;
+    float[2] size;
+
+    void init(string title, int width, int height, float[] backgroundColorArray) {
+        size = {width, height};
+        backgroundColor = backgroundColorArray;
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+        // glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        window = glfwCreateWindow(width, height, title);
+        glfwMakeContextCurrent(window);
+        glEnable(GL_DEPTH_TEST);
+    }
+
+    bool shouldClose() {
+        return glfwWindowShouldClose(window);
+    }
+
+    void pollEvents() {
+        glfwPollEvents();
+    }
+
+    void swapBuffers() {
+        glfwSwapBuffers(window);
+    }
+
+    void clear() {
+        glClearColor(backgroundColor[0] / 255.0f, backgroundColor[1] / 255.0f, backgroundColor[2] / 255.0f, backgroundColor[3] / 255.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
+
+    void destroy() {
+        glfwDestroyWindow(window);
+    }
+};
+
+struct Shader {
+    int id;
+
+    void init(string vertexShaderSource, string fragmentShaderSource, string geometryShaderSource) {
+        int[3] shaders = {
+            compileShader(vertexShaderSource, GL_VERTEX_SHADER),
+            compileShader(fragmentShaderSource, GL_FRAGMENT_SHADER), 0
+        }
+
+        if (geometryShaderSource != "")
+            shaders[2] = compileShader(geometryShaderSource, GL_GEOMETRY_SHADER);
+
+        for (int i = 0; i < shaders.length(); i++)
+            if (shaders[i] != 0) if (!((bool) shaders[i])) return;
+
+        id = glCreateProgram();
+    
+        for (int i = 0; i < shaders.length(); i++)
+            if (shaders[i] != 0) glAttachShader(id, shaders[i]);
+
+        glLinkProgram(id);
+
+        for (int i = 0; i < shaders.length(); i++)
+            if (shaders[i] != 0) glDetachShader(id, shaders[i]);
+
+        for (int i = 0; i < shaders.length(); i++)
+            if (shaders[i] != 0) glDeleteShader(shaders[i]);
+    
+        int linkStatus = glGetProgramiv(id, GL_LINK_STATUS);
+
+        if (!((bool) linkStatus)) {
+            int length = glGetProgramiv(id, GL_INFO_LOG_LENGTH);
+            string log = glGetProgramInfoLog(id, length);
+            std::rout("program linking error: \n" + log);
+            glDeleteProgram(id);
+        } return;
+    }
+
+    int compileShader(string shaderSource, int shaderType) {
+        int shader = glCreateShader(shaderType);
+
+        glShaderSource(shader, 1, shaderSource);
+        glCompileShader(shader);
+    
+        int compileStatus = glGetShaderiv(shader, GL_COMPILE_STATUS);
+    
+        if (!((bool) compileStatus)) {
+            int length = glGetShaderiv(shader, GL_INFO_LOG_LENGTH);
+            string log = glGetShaderInfoLog(shader, length);
+
+            if (shaderType == GL_VERTEX_SHADER)
+                std::rout("vertex shader compilation error: \n" + log);
+
+            if (shaderType == GL_FRAGMENT_SHADER)
+                std::rout("fragment shader compilation error: \n" + log);
+
+            if (shaderType == GL_GEOMETRY_SHADER)
+                std::rout("geometry shader compilation error: \n" + log);
+
+            glDeleteShader(shader);
+            return 0;
+        } return shader;
+    }
+
+    void use() {
+        glUseProgram(id);
+        return;
+    }
+
+    void unuse() {
+        glUseProgram(0);
+        return;
+    }
+
+    void destroy() {
+        glDeleteProgram(id);
+        return;
+    }
+};
+
+struct Mesh {
+    int count, datas, vaos, vbos, currentOBJ;
+    string meshName;
+    Shader currentShader;
+
+    void init(Shader shader, string mesh, int obj) {
+        datas = std::vector::new();
+        vaos = std::vector::new();
+        vbos = std::vector::new();
+
+        currentShader = shader;
+        meshName = mesh;
+        currentOBJ = obj;
+
+        string[] materials = getMeshMaterials(currentOBJ, meshName);
+        count = materials.length();
+
+        for (int i = 0; i < count; i++) {
+            float[] data = getMeshDataByMaterial(currentOBJ, meshName, materials[i]);
+            VAO vao;
+            VBO vbo;
+            vao.init();
+            vao.bind();
+            vbo.init();
+            vbo.bind();
+            vbo.bufferData(data.length() * FLOAT_SIZE, data);
+            vao.enableAttrib(0, 3, 8 * FLOAT_SIZE, 0 * FLOAT_SIZE);
+            vao.enableAttrib(1, 2, 8 * FLOAT_SIZE, 3 * FLOAT_SIZE);
+            vao.enableAttrib(2, 3, 8 * FLOAT_SIZE, 5 * FLOAT_SIZE);
+            vao.unbind();
+            vbo.unbind();
+            std::vector::addFloatArray(datas, data);
+            std::vector::addStruct(vaos, vao);
+            std::vector::addStruct(vbos, vbo);
+        } return;
+    }
+
+    void render() {
+        for (int i = 0; i < count; i++) {
+            VAO vao = std::vector::getStruct(vaos, i);
+            float[] data = std::vector::getFloatArray(datas, i);
+            currentShader.use();
+            vao.bind();
+            glDrawArrays(GL_TRIANGLES, 0, (int) (data.length() / 8));
+            vao.unbind();
+            currentShader.unuse();
+        } return;
+    }
+
+    void destroy() {
+        for (int i = 0; i < count; i++) {
+            VAO vao = std::vector::getStruct(vaos, i);
+            VBO vbo = std::vector::getStruct(vbos, i);
+            vao.destroy();
+            vbo.destroy();
+        } return;
+    }
+};
+
+struct Model {
+    int meshes, currentOBJ;
+    Shader currentShader;
+
+    void init(Shader shader, int obj) {
+        meshes = std::vector::new();
+        currentShader = shader;
+        currentOBJ = obj;
+        
+        string[] meshNames = getMeshes(currentOBJ);
+
+        for (int i = 0; i < meshNames.length(); i++) {
+            Mesh mesh;
+            mesh.init(currentShader, meshNames[i], currentOBJ);
+            std::vector::addStruct(meshes, mesh);
+        }
+    }
+
+    void render() {
+        for (int i = 0; i < std::vector::length(meshes); i++) {
+            Mesh mesh = std::vector::getStruct(meshes, i);
+            mesh.render();
+        }
+    }
+
+    void destroy() {
+        for (int i = 0; i < std::vector::length(meshes); i++) {
+            Mesh mesh = std::vector::getStruct(meshes, i);
+            mesh.destroy();
+        }
+    }
+};
+
+struct FreeCamera {
+    Window currentWindow;
+    Shader currentShader;
+    float[3] position, speed;
+    float fieldOfView, nearPlane, farPlane;
+    float mouseSensitivity, yaw, pitch;
+
+    void init(Window window, Shader shader, float fov, float near, float far, float sensitivity, float normalSpeed, float sprintSpeed) {
+        currentWindow = window;
+        currentShader = shader;
+        fieldOfView = fov;
+        nearPlane = near;
+        farPlane = far;
+        mouseSensitivity = sensitivity;
+        speed = {0.0f, normalSpeed, sprintSpeed};
+        return;
+    }
+
+    void processInputs() {
+        glfwSetInputMode(currentWindow.window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+
+        float[] mouse_pos = glfwGetCursorPos(currentWindow.window);
+        float x = mouse_pos[0], y = mouse_pos[1];
+
+        float x_offset = mouseSensitivity * (float) (x - currentWindow.size[0] / 2) / currentWindow.size[0];
+        float y_offset = mouseSensitivity * (float) (y - currentWindow.size[1] / 2) / currentWindow.size[1];
+
+        yaw += x_offset;
+        pitch -= y_offset;
+
+        if (pitch >= 89.9f)
+            pitch = 89.9f;
+
+        if (pitch <= -89.9f)
+            pitch = -89.9f;
+
+        glfwSetCursorPos(currentWindow.window, currentWindow.size[0] / 2, currentWindow.size[1] / 2);
+
+        int direction = glm::vec3(
+            std::cos(glm::radians(yaw)) * std::cos(glm::radians(pitch)),
+            std::sin(glm::radians(pitch)),
+            std::sin(glm::radians(yaw)) * std::cos(glm::radians(pitch))
+        ); int front = glm::normalize(direction);
+        int up = glm::vec3(0.0f, 1.0f, 0.0f);
+
+        if (glfwGetKey(currentWindow.window, GLFW_KEY_LEFT_CONTROL)) {
+            speed[0] = speed[2];
+        } else {
+            speed[0] = speed[1];
+        } int speed_vec = glm::vec3(speed[0], speed[0], speed[0]);
+
+        if (glfwGetKey(currentWindow.window, GLFW_KEY_W)) {
+            int pos = glm::vec3(position[0], position[1], position[2]);
+            position = glm::value_ptr_float_arr(glm::add(pos, glm::mul(speed_vec, front)));
+        }
+
+        if (glfwGetKey(currentWindow.window, GLFW_KEY_S)) {
+            int pos = glm::vec3(position[0], position[1], position[2]);
+            position = glm::value_ptr_float_arr(glm::add(pos, glm::mul(speed_vec, glm::neg(front))));
+        }
+
+        if (glfwGetKey(currentWindow.window, GLFW_KEY_D)) {
+            int pos = glm::vec3(position[0], position[1], position[2]);
+            position = glm::value_ptr_float_arr(glm::add(pos, glm::mul(speed_vec, glm::normalize(glm::cross(front, up)))));
+        }
+
+        if (glfwGetKey(currentWindow.window, GLFW_KEY_A)) {
+            int pos = glm::vec3(position[0], position[1], position[2]);
+            position = glm::value_ptr_float_arr(glm::add(pos, glm::mul(speed_vec, glm::neg(glm::normalize(glm::cross(front, up))))));
+        }
+
+        if (glfwGetKey(currentWindow.window, GLFW_KEY_SPACE)) {
+            int pos = glm::vec3(position[0], position[1], position[2]);
+            position = glm::value_ptr_float_arr(glm::add(pos, glm::mul(speed_vec, up)));
+        }
+
+        if (glfwGetKey(currentWindow.window, GLFW_KEY_LEFT_SHIFT)) {
+            int pos = glm::vec3(position[0], position[1], position[2]);
+            position = glm::value_ptr_float_arr(glm::add(pos, glm::mul(speed_vec, glm::neg(up))));
+        }
+    }
+
+    void updateMatrices() {
+        int direction = glm::vec3(
+            std::cos(glm::radians(yaw)) * std::cos(glm::radians(pitch)),
+            std::sin(glm::radians(pitch)),
+            std::sin(glm::radians(yaw)) * std::cos(glm::radians(pitch))
+        ); int front = glm::normalize(direction);
+
+        int proj = glm::perspective(glm::radians(fieldOfView), currentWindow.size[0] / currentWindow.size[1], nearPlane, farPlane);
+        int up = glm::vec3(0.0f, 1.0f, 0.0f);
+        int pos = glm::vec3(position[0], position[1], position[2]);
+        int view = glm::lookAt(pos, glm::add(pos, front), up);
+
+        currentShader.use();
+        glUniformMatrix4fv(glGetUniformLocation(currentShader.id, "proj"), 1, false, glm::value_ptr(proj));
+        glUniformMatrix4fv(glGetUniformLocation(currentShader.id, "view"), 1, false, glm::value_ptr(view));
+        currentShader.unuse();
+    }
+};
+
+int main(string[] args) {
+    Context context;
+    context.init();
+    Window window;
+    window.init("Aermoss", 1200, 600, {0.0f, 128.0f, 128.0f, 255.0f});
+
+    Shader shader;
+    shader.init(
+        std::read("../shaders/gltest.vert"),
+        std::read("../shaders/gltest.frag"), ""
+    );
+
+    FreeCamera camera;
+    camera.init(window, shader, 90.0f, 0.1f, 100.0f, 100.0f, 0.1f, 0.2f);
+
+    int position = glm::vec3(0.0f, 0.0f, 0.0f);
+    int model = glm::mat4(1.0f);
+    model = glm::translate(model, position);
+    
+    shader.use();
+    glUniformMatrix4fv(glGetUniformLocation(shader.id, "model"), 1, false, glm::value_ptr(model));
+    shader.unuse();
+
+    Model model;
+    model.init(shader, loadOBJ("../x/monkey.obj"));
+
+    int frameCount;
+    float previousTime;
+
+    while (!window.shouldClose()) {
+        int error = glGetError();
+        if (error != 0) std::rout((string) error + std::endl());
+
+        float currentTime = glfwGetTime();
+        frameCount++;
+
+        if (currentTime - previousTime >= 1.0f) {
+            std::rout("FPS: " + (string) frameCount + std::endl());
+            frameCount = 0;
+            previousTime = currentTime;
+        }
+
+        window.pollEvents();
+        camera.processInputs();
+        camera.updateMatrices();
+        window.clear();
+        model.render();
+        window.swapBuffers();
+    }
+
+    window.destroy();
+    context.terminate();
+    return 0;
+}

@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-import os, sys
+import os, sys, rsxpy
 
 with open("README.md", "r", encoding = "UTF-8") as file:
     long_desc = file.read()
@@ -13,9 +13,12 @@ with open("MANIFEST.in", "w") as file:
 
     file.write(manifest)
 
+with open("requirements.txt", "w") as file:
+    file.write("\n".join(rsxpy.tools.get_requirements()))
+
 setup(
     name = "rsxpy",
-    version = "0.1.1",
+    version = rsxpy.tools.get_version(),
     entry_points = {
         "console_scripts": [
             "rsxpy = rsxpy.core:main",
@@ -32,5 +35,5 @@ setup(
     keywords = [],
     packages = find_packages(),
     include_package_data = True,
-    install_requires = ["raylib", "pyinstaller", "pysdl2", "pysdl2-dll"]
+    install_requires = rsxpy.tools.get_requirements()
 )

@@ -1,0 +1,1 @@
+include "rsxobj/rsxobj.py" : *;

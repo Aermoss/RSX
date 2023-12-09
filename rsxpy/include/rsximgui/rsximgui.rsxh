@@ -1,0 +1,8 @@
+include "rsximgui/rsximgui.py" : *;
+include "rsximgui/rsximgui_globals.py" : *;
+
+void PlotLines(string name, float[] data, int count) {
+    int addr = ImGui::_add_var_float_arr(data);
+    ImGui::_PlotLines(name, addr, count);
+    ImGui::_del_var(addr);
+}

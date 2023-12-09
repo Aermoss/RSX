@@ -6,8 +6,7 @@ import rsxpy as rsx
 
 rsx.builder.build(
     path = "rsx.exe",
-    console = True,
-    hidden_imports = ["raylib", "pysdl2", "pysdl2-dll", "pyinstaller"]
+    console = True
 )
 
 rsx.builder.build_raid(

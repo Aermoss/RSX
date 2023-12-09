@@ -1,7 +1,34 @@
-import sys, os, inspect
+import sys, os, inspect, typing
+
+from rsxpy import tools
+
+class Struct:
+    def __init__(self, type = None):
+        self.type = tools.AnyType() if type == None else type
+
+class RawStruct:
+    def __init__(self, type = None):
+        self.type = tools.AnyType() if type == None else type
+    
+class Array:
+    def __init__(self, type = None):
+        self.type = tools.AnyType() if type == None else type
+
+class RawArray:
+    def __init__(self, type = None):
+        self.type = tools.AnyType() if type == None else type
+
+current_context, current_environ = None, None
+
+def context():
+    return current_context
+
+def environ():
+    return current_environ
 
 def begin():
-    global f_locals, copy_f_locals
+    global f_locals, copy_f_locals, current_context
+    current_context, current_environ = None, None
     f_locals = inspect.stack()[1][0].f_locals
     copy_f_locals = f_locals.copy()
 
@@ -14,23 +41,24 @@ def end():
             functions.append(f_locals[i])
 
     def get_type_str(var_type):
-        if var_type == int:
-            return "INT"
-
-        elif var_type == float:
-            return "FLOAT"
-
-        elif var_type == bool:
-            return "BOOL"
-
-        elif var_type == str:
-            return "STRING"
-
-        elif var_type == None:
-            return "VOID"
-
-        else:
-            raise TypeError("unknown type")
+        if var_type == int: return "INT"
+        elif var_type == float: return "FLOAT"
+        elif var_type == bool: return "BOOL"
+        elif var_type == str: return "STRING"
+        elif var_type == None: return "VOID"
+        elif isinstance(var_type, Struct):
+            return tools.StructType(var_type.type)
+        elif isinstance(var_type, RawStruct):
+            return tools.RawStructType(var_type.type)
+        elif isinstance(var_type, Array):
+            return tools.ArrayType(var_type.type)
+        elif isinstance(var_type, RawArray):
+            return tools.RawArrayType(var_type.type)
+        elif type(var_type) == typing._GenericAlias \
+            and str(var_type).startswith("typing.List"):
+            temp = str(var_type).replace("typing.List", "")[1:-1].replace("str", "string")
+            if temp in ["int", "float", "string", "bool"]: return tools.ArrayType(temp.upper())
+        else: raise TypeError("unknown type")
 
     for i in functions:
         args = {}
@@ -48,6 +76,8 @@ def end():
             args[i.__code__.co_varnames[j]] = get_type_str(i.__annotations__[i.__code__.co_varnames[j]])
 
         code = f"def _{i.__name__}(environ):\n"
+        code += f"    global current_environ, current_context\n"
+        code += f"    current_environ, current_context = environ, environ[\"context\"]\n"
         code += f"    return globals()[\"{i.__name__}\"]("
 
         for index, j in enumerate(args):

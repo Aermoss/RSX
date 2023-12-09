@@ -4,7 +4,7 @@ import rsxpy as rsx
 
 import __main__
 
-def build(path, console, hidden_imports = ["raylib", "pysdl2", "pysdl2-dll"]):
+def build(path, console, hidden_imports = rsx.tools.get_requirements() + ["tkinter", "tkinter.messagebox"]):
     if console: console = "--console"
     else: console = "--noconsole"
     hidden_imports_str = ""
@@ -32,9 +32,26 @@ def build_raid(path):
     os.remove("raid.spec")
     os.chdir(first_dir)
 
-def build_program(console, context, hidden_imports = ["raylib", "pysdl2", "pysdl2-dll", "tkinter", "tkinter.messagebox"], icon = "icon.ico"):
+def build_program(console, context, hidden_imports = ["pyinstaller", "tkinter", "tkinter.messagebox"], icon = "icon.ico", onefile = False):
+    lib_deps = {
+        "rsxraylib": ["raylib"],
+        "rsxglm": ["pyglm"],
+        "rsxsdl2": ["pysdl2", "pysdl2-dll"],
+        "rsxglfw": ["glfw"],
+        "rsxgl": ["pyglet", "numpy"],
+        "rsximgui": ["imgui"],
+        "rsximg": ["pillow"],
+        "rsxrvr": ["openvr"]
+    }
+    
+    for i in lib_deps:
+        if i in context.included:
+            for j in lib_deps[i]:
+                if j not in hidden_imports:
+                    hidden_imports.append(j)
+    
     with open(context.file.replace("\\", "/"), "r") as file:
-        file_content = rsx.file.read()
+        file_content = file.read()
 
     modules = []
     libfuncs = {}
@@ -78,7 +95,7 @@ def build_program(console, context, hidden_imports = ["raylib", "pysdl2", "pysdl
 
         new_libfuncs += "    \"" + i + "\": {"
         new_libfuncs += "\"type\": \"libfunc\", "
-        new_libfuncs += "\"return_type\": \"" + libfuncs[i]["return_type"] + "\", "
+        new_libfuncs += "\"return_type\": \"" + str(libfuncs[i]["return_type"]) + "\", "
         new_libfuncs += "\"args\": " + str(libfuncs[i]["args"]).replace("'", "\"") + ", "
         new_libfuncs += "\"func\": " + func_name + "[\"" + libfuncs[i]["func"].__name__ + "\"][\"func\"], "
         new_libfuncs += "\"const\": False}"
@@ -107,7 +124,8 @@ def build_program(console, context, hidden_imports = ["raylib", "pysdl2", "pysdl
             new_scope_str += i
 
     code += "code = \"\"\""
-    code += file_content
+    code += file_content.replace("\\n", "\\\\n").replace("\\r", "\\\\r").replace("\\t", "\\\\t").replace("\\0", "\\\\0") \
+                            .replace("\\\"", "\\\\\"").replace("\\\'", "\\\\\'").replace("\\\\", "\\\\\\\\")
     code += "\"\"\"\n"
     code += "\n"
     code += f"file = \"{context.file}\"\n"
@@ -166,26 +184,36 @@ def build_program(console, context, hidden_imports = ["raylib", "pysdl2", "pysdl
     first_dir = os.getcwd()
     os.chdir(rsx.tools.get_dir())
 
-    with open("temp.py", "w") as file:
-        file.write(code)
+    if onefile:
+        with open("temp.py", "w") as file:
+            file.write(code)
 
-    subprocess.run(f"pyinstaller temp.py {console} --noconfirm --onefile --clean {paths_str} --icon={icon} {hidden_imports_str}"[:-1].split(" "))
+        subprocess.run(f"pyinstaller temp.py {console} --noconfirm --onefile --clean {paths_str} --icon={icon} {hidden_imports_str}"[:-1].split(" "))
 
-    with open("dist/" + os.listdir("dist")[0], "rb") as file:
-        data = file.read()
+        with open("dist/" + os.listdir("dist")[0], "rb") as file:
+            data = file.read()
 
-    ext = os.path.splitext(os.listdir("dist")[0])[1]
+        ext = os.path.splitext(os.listdir("dist")[0])[1]
 
-    shutil.rmtree("build", ignore_errors = True)
-    shutil.rmtree("dist", ignore_errors = True)
-    os.remove("temp.spec")
-    os.remove("temp.py")
+        shutil.rmtree("build", ignore_errors = True)
+        shutil.rmtree("dist", ignore_errors = True)
+        os.remove("temp.spec")
+        os.remove("temp.py")
 
-    if "__pycache__" in os.listdir():
-        shutil.rmtree("__pycache__", ignore_errors = True)
+        os.chdir(first_dir)
+        name = os.path.splitext(context.file.replace("\\", "/"))[0] + ext
 
-    os.chdir(first_dir)
-    name = os.path.splitext(context.file.replace("\\", "/"))[0] + ext
+        with open(name, "wb") as file:
+            file.write(data)
+    
+    else:
+        with open(os.path.splitext(os.path.split(context.file)[1])[0] + ".py", "w") as file:
+            file.write(code)
 
-    with open(name, "wb") as file:
-        file.write(data)
+        subprocess.run((f"pyinstaller " + os.path.splitext(os.path.split(context.file)[1])[0] + \
+                            f".py {console} --noconfirm --clean {paths_str} --icon={icon} {hidden_imports_str}")[:-1].split(" "))
+        shutil.copytree("dist/" + os.path.splitext(os.path.split(context.file)[1])[0], first_dir + "/" + os.path.splitext(os.path.split(context.file)[1])[0], dirs_exist_ok = True)
+        shutil.rmtree("build", ignore_errors = True)
+        shutil.rmtree("dist", ignore_errors = True)
+        os.remove(os.path.splitext(os.path.split(context.file)[1])[0] + ".spec")
+        os.remove(os.path.splitext(os.path.split(context.file)[1])[0] + ".py")

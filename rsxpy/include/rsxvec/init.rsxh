@@ -1,0 +1,5 @@
+namespace std {
+    namespace vector {
+        include "rsxvec/rsxvec.py" : *;
+    }
+}

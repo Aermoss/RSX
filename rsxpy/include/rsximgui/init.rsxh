@@ -1,0 +1,4 @@
+namespace ImGui {
+    include "rsximgui/constants.rsxh" : *;
+    include "rsximgui/rsximgui.rsxh" : *;
+}

@@ -1,16 +1,15 @@
-from rsxpy.tools import *
+import rsxpy.tools as tools
 
 import msvcrt
 
-create_library("rsxterm")
+tools.create_library("rsxterm")
 
-@create_function("VOID", {"style": "INT"})
+@tools.create_function("VOID", {"style": "INT"})
 def set_text_attr(environment):
-    console_handle = ctypes.windll.kernel32.GetStdHandle(-11)
-    ctypes.windll.kernel32. SetConsoleTextAttribute(console_handle, environment["args"]["style"])
+    tools.set_text_attr(environment["args"]["style"])
 
-@create_function("VOID", {})
+@tools.create_function("VOID", {})
 def getch(environment):
     msvcrt.getch()
 
-rsxterm = pack_library()
+rsxterm = tools.pack_library()

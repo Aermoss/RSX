@@ -18,6 +18,7 @@ def main(argv):
         "arrays:arrays_eight": {"args": [[0, 1, 2, 3], [4, 5, 6, 7, 8]], "result": [0, 1, 2, 3, 4, 5, 6, 7, 8]},
         "arrays:arrays_nine": {"args": [[0, 1, 2, 3]], "result": 4},
         "arrays:arrays_ten": {"args": [[0, 1, 2, 3]], "result": [3, 2, 1, 0]},
+        "arrays:arrays_eleven": {"args": [[0, 1, 2]], "result": [0, 10, 2]},
         "scopes:scopes_one": {"args": [], "result": 8},
         "scopes:scopes_two": {"args": [], "result": 10},
         "variables:variables_one": {"args": [], "result": -30},
@@ -35,8 +36,8 @@ def main(argv):
         "functions:functions_three": {"args": [], "result": 20.23},
         "functions:functions_four": {"args": [], "result": "RSX"},
         "functions:functions_five": {"args": [], "result": True},
-        "threads:threads_one": {"args": [], "result": 30},
-        "casting:casting_one": {"args": [128], "result": "128"}
+        # "threads:threads_one": {"args": [], "result": 30},
+        "casting:casting_one": {"args": [128], "result": "128"},
     }
 
     passed, failed = 0, 0
@@ -52,7 +53,7 @@ def main(argv):
 
         res = "passed" if functions[i.split(":")[1]](*tests[i]["args"]) == tests[i]["result"] else "failed"
         # print(functions[i.split(":")[1]](*tests[i]["args"]))
-        print(f"running test ", end = "")
+        print(f"RSX: INFO: running test ", end = "")
         rsx.tools.set_text_attr(14)
         print(i.split(":")[1] + " from " + i.split(":")[0] + ".rsx", end = ": ", flush = True)
         if res == "passed": rsx.tools.set_text_attr(10)

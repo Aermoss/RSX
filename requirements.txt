@@ -1,0 +1,11 @@
+raylib
+pyinstaller
+pysdl2
+pysdl2-dll
+glfw
+imgui
+pyglet
+pyglm
+numpy
+pillow
+openvr
